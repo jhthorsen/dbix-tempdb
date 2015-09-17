@@ -100,17 +100,28 @@ sub create_database {
 =head2 dsn
 
   ($dsn, $user, $pass, $attrs) = $self->dsn;
+  ($dsn, $user, $pass, $attrs) = DBIx::TempDB->dsn($url);
 
-Will parse L</url> and return a list of arguments suitable for L<DBI/connect>.
+Will parse L</url> or C<$url>, and return a list of arguments suitable for
+L<DBI/connect>.
 
-Note that this method cannot be called before L</create_database> is called.
+Note that this method cannot be called as an object method before
+L</create_database> is called. You can on the other hand call it as a class
+method, with an L<Mojo::URL> or URL string as input.
 
 =cut
 
 sub dsn {
-  my $self = shift;
-  confess 'Cannot return dsn before create_database() is called.' unless $self->{database_name};
-  $self->can(sprintf '_dsn_for_%s', $self->url->scheme)->($self);
+  my ($self, $url) = @_;
+
+  if (!ref $self and $url) {
+    $url = Mojo::URL->new($url) unless ref $url;
+    $self->can(sprintf '_dsn_for_%s', $url->scheme)->($self, $url, $url->path->parts->[0]);
+  }
+  else {
+    confess 'Cannot return dsn before create_database() is called.' unless $self->{database_name};
+    $self->can(sprintf '_dsn_for_%s', $self->url->scheme)->($self, $self->url, $self->{database_name});
+  }
 }
 
 =head2 new
@@ -171,10 +182,9 @@ sub _cleanup {
 }
 
 sub _dsn_for_postgresql {
-  my $self = shift;
-  my $url  = $self->url;
-  my %opt  = %{$url->query->to_hash};
-  my $dsn  = "dbi:Pg:dbname=$self->{database_name}";
+  my ($class, $url, $database_name) = @_;
+  my %opt = %{$url->query->to_hash};
+  my $dsn = "dbi:Pg:dbname=$database_name";
   my @userinfo;
 
   if (my $host = $url->host) { $dsn .= ";host=$host" }
@@ -191,10 +201,9 @@ sub _dsn_for_postgresql {
 }
 
 sub _dsn_for_mysql {
-  my $self = shift;
-  my $url  = $self->url;
-  my %opt  = %{$url->query->to_hash};
-  my $dsn  = "dbi:mysql:dbname=$self->{database_name}";
+  my ($class, $url, $database_name) = @_;
+  my %opt = %{$url->query->to_hash};
+  my $dsn = "dbi:mysql:dbname=$database_name";
   my @userinfo;
 
   if (my $host = $url->host) { $dsn .= ";host=$host" }

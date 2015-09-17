@@ -28,7 +28,7 @@ state between tests.
   diag $tmpdb->url;
 
   # run sql commands in the test database
-  $tmpdb->execute("CREATE ...");
+  $tmpdb->execute("create table ...");
   $tmpdb->execute_file("path/relative/to/test.script");
 
   # connect to the temp database
@@ -53,6 +53,8 @@ use constant MAX_NUMBER_OF_TRIES => $ENV{TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
 
 our $VERSION = '0.01';
 
+our %SCHEMA_DATABASE = (postgresql => 'postgres', mysql => 'mysql');
+
 =head1 METHODS
 
 =head2 create_database
@@ -65,20 +67,17 @@ method multiple times will simply do nothing.
 =cut
 
 sub create_database {
+  return $_[0] if $_[0]->{created};
+
   my $self = shift;
-  my ($dbi, $guard, $name);
-
-  return $self if $self->{database_name};
-
-  {
-    local $self->{database_name} = $self->_schema_database;
-    $dbi = DBI->connect($self->dsn);
-  }
+  my $dbi  = DBI->connect($self->_schema_dsn);
+  my ($guard, $name);
 
   local $@;
   while (++$guard < MAX_NUMBER_OF_TRIES) {
     $name = $self->_generate_database_name($guard);
-    eval {1} or next;
+    eval { $dbi->do("create database $name") } or next;
+    $self->{created}++;
     $self->{database_name} = $name;
     $self->{url}->path($name);
     return $self;
@@ -130,8 +129,8 @@ sub new {
     confess "Cannot generate temp database for '@{[$url->scheme]}'. $class\::$dsn_for() is missing";
   }
 
-  $self->{url} = $url;
-  $self->{pid} = ($self->{fork_watch} // 1) ? $$ : undef;
+  $self->{schema_database} ||= $SCHEMA_DATABASE{$url->scheme};
+
   return $self->create_database if $self->{auto_create} // 1;
   return $self;
 }
@@ -148,6 +147,15 @@ Note that this method cannot be called before L</create_database> is called.
 =cut
 
 sub url { shift->{url} }
+
+sub DESTROY { $_[0]->{created} and $_[0]->_cleanup }
+
+sub _cleanup {
+  my $self = shift;
+  my $dbi  = DBI->connect($self->_schema_dsn);
+
+  $dbi->do("drop database $self->{database_name}");
+}
 
 sub _dsn_for_postgresql {
   my $self = shift;
@@ -194,7 +202,13 @@ sub _generate_database_name {
   my @name = (Sys::Hostname::hostname, $<, File::Basename::basename($0));
 
   push @name, $n if $n > 0;
-  return join '-', map { s!\W!_!g; $_ } @name;
+  return join '_', map { s!\W!_!g; $_ } @name;
+}
+
+sub _schema_dsn {
+  my $self = shift;
+  local $self->{database_name} = $self->{schema_database};
+  return $self->dsn;
 }
 
 =head1 COPYRIGHT AND LICENSE

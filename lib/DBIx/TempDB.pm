@@ -59,7 +59,9 @@ use Mojo::URL;    # because I can't figure out how to use URI.pm
 use Sys::Hostname ();
 
 use constant CWD => eval { File::Basename::dirname(Cwd::abs_path($0)) };
-use constant MAX_NUMBER_OF_TRIES => $ENV{TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
+use constant DEBUG => $ENV{DBIX_TEMP_DB_DEBUG} || 0;
+use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
+use constant MAX_OPEN_FDS => eval { use POSIX qw( sysconf _SC_OPEN_MAX ); sysconf(_SC_OPEN_MAX) } || 1024;
 
 our $VERSION = '0.02';
 
@@ -94,8 +96,10 @@ sub create_database {
   while (++$guard < MAX_NUMBER_OF_TRIES) {
     $name = $self->_generate_database_name($guard);
     eval { $dbh->do("create database $name") } or next;
-    $self->{created}++;
+    warn "[TempDB:$$] Created temp database $name\n" if DEBUG;
     $self->{database_name} = $name;
+    $self->_drop_from_child if $self->{drop_from_child};
+    $self->{created}++;
     $self->{url}->path($name);
     $ENV{DBIX_TEMP_DB_URL} = $self->{url}->to_string;
     return $self;
@@ -172,6 +176,7 @@ sub execute_file {
   my $ret = my $sql = '';
   while ($ret = $SQL->sysread(my $buffer, 131072, 0)) { $sql .= $buffer }
   die qq{DBIx::TempDB can't read from file "$path": $!} unless defined $ret;
+  warn "[TempDB:$$] Execute $path\n" if DEBUG;
   $self->execute($sql);
 }
 
@@ -190,6 +195,13 @@ Creates a new object after checking the C<$url> is valid. C<%args> can be:
 L</create_database> will be called automatically, unless C<auto_create> is
 set to a false value.
 
+=item * drop_from_child
+
+Setting "drop_from_child" to a true value will create a child process which
+will remove the temporary database, when the main process ends.
+
+TODO: This might become the default.
+
 =back
 
 =cut
@@ -205,6 +217,7 @@ sub new {
   }
 
   $self->{schema_database} ||= $SCHEMA_DATABASE{$url->scheme};
+  warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
   return $self->create_database if $self->{auto_create} // 1;
   return $self;
@@ -223,13 +236,22 @@ Note that this method cannot be called before L</create_database> is called.
 
 sub url { shift->{url} }
 
-sub DESTROY { $_[0]->{created} and $_[0]->_cleanup }
+sub DESTROY {
+  my $self = shift;
+  return close $self->{DROP_PIPE} if $self->{DROP_PIPE};
+  $_[0]->{created} and $_[0]->_cleanup;
+}
 
 sub _cleanup {
   my $self = shift;
   my $dbh  = DBI->connect($self->_schema_dsn);
 
-  $dbh->do("drop database $self->{database_name}");
+  eval {
+    $dbh->do("drop database $self->{database_name}");
+    1;
+  } or do {
+    die "[$$] Unable to drop $self->{database_name}: $@";
+  };
 }
 
 sub _dsn_for_postgresql {
@@ -282,6 +304,28 @@ sub _schema_dsn {
   my $self = shift;
   local $self->{database_name} = $self->{schema_database};
   return $self->dsn;
+}
+
+sub _drop_from_child {
+  my $self = shift;
+  my $ppid = $$;
+
+  pipe my $READ, $self->{DROP_PIPE} or confess "Could not create pipe: $!";
+  defined(my $pid = fork) or confess "Failed to fork: $!";
+
+  # parent
+  return $self->{drop_pid} = $pid if $pid;
+
+  # child
+  for (0 .. MAX_OPEN_FDS - 1) {
+    next if fileno($READ) == $_;
+    POSIX::close($_);
+  }
+
+  warn "[TempDB:$$] Waiting for $ppid to end\n" if DEBUG;
+  1 while <$READ>;
+  $self->_cleanup;
+  exit 0;
 }
 
 =head1 COPYRIGHT AND LICENSE

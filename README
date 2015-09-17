@@ -1,0 +1,87 @@
+NAME
+    DBIx::TempDB - Create a temporary database
+
+VERSION
+    0.01
+
+DESCRIPTION
+    DBIx::TempDB is a module which allow you to create a temporary database,
+    which only lives as long as your process is alive. This can be very
+    convenient when you want to run tests in parallel, without messing up
+    the state between tests.
+
+    This module currently support PostgreSQL and MySQL by installing the
+    optional modules DBD::Pg and/or DBD::mysql. Let me know if you want
+    another database to be supported.
+
+    This module is currently EXPERIMENTAL. That means that if any major
+    design flaws have been made, they will be fixed without warning.
+
+SYNOPSIS
+      use Test::More;
+      use DBIx::TempDB;
+      use DBI;
+
+      # create a temp database
+      my $tmpdb = DBIx::TempDB->new("postgresql://postgres@localhost");
+
+      # print complete url to db server with database name
+      diag $tmpdb->url;
+
+      # connect to the temp database
+      my $db = DBI->connect($tmpdb->dsn);
+
+      # run tests...
+
+      done_testing;
+      # database is cleaned up when test exit
+
+METHODS
+  create_database
+      $self = $self->create_database;
+
+    This method will create a temp database for the current process. Calling
+    this method multiple times will simply do nothing.
+
+    The database name generated is subject for change, but currently it
+    looks like something like this: "tmp_${UID}_${0}_${HOSTNAME}".
+
+  dsn
+      ($dsn, $user, $pass, $attrs) = $self->dsn;
+
+    Will parse "url" and return a list of arguments suitable for "connect"
+    in DBI.
+
+    Note that this method cannot be called before "create_database" is
+    called.
+
+  new
+      $self = DBIx::TempDB->new($url, %args);
+      $self = DBIx::TempDB->new("mysql://127.0.0.1");
+      $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
+
+    Creates a new object after checking the $url is valid. %args can be:
+
+    *   auto_create
+
+        "create_database" will be called automatically, unless "auto_create"
+        is set to a false value.
+
+  url
+      $url = $self->url;
+
+    Returns the input URL as URL object, with path set to the temp database
+    name.
+
+    Note that this method cannot be called before "create_database" is
+    called.
+
+COPYRIGHT AND LICENSE
+    Copyright (C) 2014, Jan Henning Thorsen
+
+    This program is free software, you can redistribute it and/or modify it
+    under the terms of the Artistic License version 2.0.
+
+AUTHOR
+    Jan Henning Thorsen - "jhthorsen@cpan.org"
+

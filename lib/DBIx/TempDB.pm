@@ -15,6 +15,13 @@ which only lives as long as your process is alive. This can be very
 convenient when you want to run tests in parallel, without messing up the
 state between tests.
 
+This module currently support PostgreSQL and MySQL by installing the optional
+modules L<DBD::Pg> and/or L<DBD::mysql>. Let me know if you want another
+database to be supported.
+
+This module is currently EXPERIMENTAL. That means that if any major design
+flaws have been made, they will be fixed without warning.
+
 =head1 SYNOPSIS
 
   use Test::More;
@@ -26,10 +33,6 @@ state between tests.
 
   # print complete url to db server with database name
   diag $tmpdb->url;
-
-  # run sql commands in the test database
-  $tmpdb->execute("create table ...");
-  $tmpdb->execute_file("path/relative/to/test.script");
 
   # connect to the temp database
   my $db = DBI->connect($tmpdb->dsn);
@@ -46,7 +49,7 @@ use warnings;
 use Carp 'confess';
 use DBI;
 use File::Basename ();
-use Mojo::URL;
+use Mojo::URL;    # because I can't figure out how to use URI.pm
 use Sys::Hostname ();
 
 use constant MAX_NUMBER_OF_TRIES => $ENV{TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
@@ -108,6 +111,8 @@ sub dsn {
 =head2 new
 
   $self = DBIx::TempDB->new($url, %args);
+  $self = DBIx::TempDB->new("mysql://127.0.0.1");
+  $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
 
 Creates a new object after checking the C<$url> is valid. C<%args> can be:
 

@@ -1,4 +1,5 @@
 Revision history for perl distribution DBIx-TempDB
 
 0.01 Not Released
- - Started project
+ - Can make temp database for postgresql
+ - Can make temp database for mysql

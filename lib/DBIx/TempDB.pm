@@ -10,7 +10,7 @@ DBIx::TempDB - Create a temporary database
 
 =head1 DESCRIPTION
 
-L<DBIx::TempDB> is a module which allow you to create a temporary database,
+L<DBIx::TempDB> is a module which allows you to create a temporary database,
 which only lives as long as your process is alive. This can be very
 convenient when you want to run tests in parallel, without messing up the
 state between tests.
@@ -67,7 +67,7 @@ our %SCHEMA_DATABASE = (postgresql => 'postgres', mysql => 'mysql');
 This method will create a temp database for the current process. Calling this
 method multiple times will simply do nothing.
 
-The database name generated is subject for change, but currently it looks like
+The database name generated is subject to change, but currently it looks like
 something like this: C<tmp_${UID}_${0}_${HOSTNAME}>.
 
 =cut
@@ -221,7 +221,7 @@ sub _schema_dsn {
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2014, Jan Henning Thorsen
+Copyright (C) 2015, Jan Henning Thorsen
 
 This program is free software, you can redistribute it and/or modify it under
 the terms of the Artistic License version 2.0.

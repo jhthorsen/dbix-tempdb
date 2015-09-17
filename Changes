@@ -4,6 +4,8 @@ Revision history for perl distribution DBIx-TempDB
  - Fix depending on DBI
  - Add create_database() sets DBIX_TEMP_DB_URL
  - Add support for calling dsn() as a class method
+ - Add execute()
+ - Add execute_file()
 
 0.01 2015-09-17T19:12:10+0200
  - Can make temp database for postgresql

@@ -64,6 +64,9 @@ our %SCHEMA_DATABASE = (postgresql => 'postgres', mysql => 'mysql');
 This method will create a temp database for the current process. Calling this
 method multiple times will simply do nothing.
 
+The database name generated is subject for change, but currently it looks like
+something like this: C<tmp_${UID}_${0}_${HOSTNAME}>.
+
 =cut
 
 sub create_database {
@@ -199,7 +202,7 @@ sub _dsn_for_mysql {
 
 sub _generate_database_name {
   my ($self, $n) = @_;
-  my @name = (Sys::Hostname::hostname, $<, File::Basename::basename($0));
+  my @name = ('tmp', $<, File::Basename::basename($0), Sys::Hostname::hostname);
 
   push @name, $n if $n > 0;
   return join '_', map { s!\W!_!g; $_ } @name;

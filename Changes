@@ -1,6 +1,6 @@
 Revision history for perl distribution DBIx-TempDB
 
-0.02 Not Released
+0.02 2015-09-17T20:02:12+0200
  - Fix depending on DBI
  - Add create_database() sets DBIX_TEMP_DB_URL
  - Add support for calling dsn() as a class method

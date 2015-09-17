@@ -2,7 +2,30 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.01
+    0.02
+
+SYNOPSIS
+      use Test::More;
+      use DBIx::TempDB;
+      use DBI;
+
+      # create a temp database
+      my $tmpdb = DBIx::TempDB->new("postgresql://postgres@localhost");
+
+      # print complete url to db server with database name
+      diag $tmpdb->url;
+
+      # useful for reading in fixtures
+      $tmpdb->execute("create table users (name text)");
+      $tmpdb->execute_file("path/to/file.sql");
+
+      # connect to the temp database
+      my $db = DBI->connect($tmpdb->dsn);
+
+      # run tests...
+
+      done_testing;
+      # database is cleaned up when test exit
 
 DESCRIPTION
     DBIx::TempDB is a module which allow you to create a temporary database,
@@ -17,43 +40,45 @@ DESCRIPTION
     This module is currently EXPERIMENTAL. That means that if any major
     design flaws have been made, they will be fixed without warning.
 
-SYNOPSIS
-      use Test::More;
-      use DBIx::TempDB;
-      use DBI;
-
-      # create a temp database
-      my $tmpdb = DBIx::TempDB->new("postgresql://postgres@localhost");
-
-      # print complete url to db server with database name
-      diag $tmpdb->url;
-
-      # connect to the temp database
-      my $db = DBI->connect($tmpdb->dsn);
-
-      # run tests...
-
-      done_testing;
-      # database is cleaned up when test exit
-
 METHODS
   create_database
       $self = $self->create_database;
 
     This method will create a temp database for the current process. Calling
-    this method multiple times will simply do nothing.
+    this method multiple times will simply do nothing. This method is
+    normally automatically called by "new".
+
+    This method will also set "DBIX_TEMP_DB_URL" to a URL suited for modules
+    such as Mojo::Pg and Mojo::mysql.
 
     The database name generated is subject for change, but currently it
     looks like something like this: "tmp_${UID}_${0}_${HOSTNAME}".
 
   dsn
       ($dsn, $user, $pass, $attrs) = $self->dsn;
+      ($dsn, $user, $pass, $attrs) = DBIx::TempDB->dsn($url);
 
-    Will parse "url" and return a list of arguments suitable for "connect"
-    in DBI.
+    Will parse "url" or $url, and return a list of arguments suitable for
+    "connect" in DBI.
 
-    Note that this method cannot be called before "create_database" is
-    called.
+    Note that this method cannot be called as an object method before
+    "create_database" is called. You can on the other hand call it as a
+    class method, with an Mojo::URL or URL string as input.
+
+  execute
+      $self = $self->execute($sql);
+
+    This method will execute the given $sql statements in the temporary SQL
+    server.
+
+  execute_file
+      $self = $self->execute_file("relative/to/executable.sql");
+      $self = $self->execute_file("/absolute/path/stmt.sql");
+
+    This method will read the contents of a file and execute the SQL
+    statements in the temporary server.
+
+    This method is a thin wrapper around "execute".
 
   new
       $self = DBIx::TempDB->new($url, %args);

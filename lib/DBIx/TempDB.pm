@@ -6,7 +6,7 @@ DBIx::TempDB - Create a temporary database
 
 =head1 VERSION
 
-0.01
+0.02
 
 =head1 SYNOPSIS
 
@@ -61,7 +61,7 @@ use Sys::Hostname ();
 use constant CWD => eval { File::Basename::dirname(Cwd::abs_path($0)) };
 use constant MAX_NUMBER_OF_TRIES => $ENV{TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 our %SCHEMA_DATABASE = (postgresql => 'postgres', mysql => 'mysql');
 

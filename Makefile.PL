@@ -14,7 +14,7 @@ WriteMakefile(
       repository => 'https://github.com/jhthorsen/dbix-tempdb.git',
     },
   },
-  BUILD_REQUIRES => {'Test::More'  => '0.88'},
-  PREREQ_PM      => {'Mojolicious' => '6.00'},
-  test           => {TESTS         => 't/*.t'},
+  BUILD_REQUIRES => {'Test::More' => '0.88'},
+  PREREQ_PM      => {'DBI'        => '1.60', 'Mojolicious' => '6.00'},
+  test           => {TESTS        => 't/*.t'},
 );

@@ -8,20 +8,6 @@ DBIx::TempDB - Create a temporary database
 
 0.01
 
-=head1 DESCRIPTION
-
-L<DBIx::TempDB> is a module which allow you to create a temporary database,
-which only lives as long as your process is alive. This can be very
-convenient when you want to run tests in parallel, without messing up the
-state between tests.
-
-This module currently support PostgreSQL and MySQL by installing the optional
-modules L<DBD::Pg> and/or L<DBD::mysql>. Let me know if you want another
-database to be supported.
-
-This module is currently EXPERIMENTAL. That means that if any major design
-flaws have been made, they will be fixed without warning.
-
 =head1 SYNOPSIS
 
   use Test::More;
@@ -41,6 +27,20 @@ flaws have been made, they will be fixed without warning.
 
   done_testing;
   # database is cleaned up when test exit
+
+=head1 DESCRIPTION
+
+L<DBIx::TempDB> is a module which allow you to create a temporary database,
+which only lives as long as your process is alive. This can be very
+convenient when you want to run tests in parallel, without messing up the
+state between tests.
+
+This module currently support PostgreSQL and MySQL by installing the optional
+modules L<DBD::Pg> and/or L<DBD::mysql>. Let me know if you want another
+database to be supported.
+
+This module is currently EXPERIMENTAL. That means that if any major design
+flaws have been made, they will be fixed without warning.
 
 =cut
 

@@ -65,7 +65,11 @@ our %SCHEMA_DATABASE = (postgresql => 'postgres', mysql => 'mysql');
   $self = $self->create_database;
 
 This method will create a temp database for the current process. Calling this
-method multiple times will simply do nothing.
+method multiple times will simply do nothing. This method is normally
+automatically called by L</new>.
+
+This method will also set C<DBIX_TEMP_DB_URL> to a URL suited for modules
+such as L<Mojo::Pg> and L<Mojo::mysql>.
 
 The database name generated is subject for change, but currently it looks like
 something like this: C<tmp_${UID}_${0}_${HOSTNAME}>.
@@ -86,6 +90,7 @@ sub create_database {
     $self->{created}++;
     $self->{database_name} = $name;
     $self->{url}->path($name);
+    $ENV{DBIX_TEMP_DB_URL} = $self->{url}->to_string;
     return $self;
   }
 

@@ -5,6 +5,7 @@ use DBIx::TempDB;
 plan skip_all => 'TEST_PG_DSN=postgresql://localhost' unless $ENV{TEST_PG_DSN};
 
 $ENV{DBIX_TEMP_DB_KEEP_DATABASE} = 1;
+$ENV{DBIX_TEMP_DB_SILENT} //= 1;
 my $tempdb = DBIx::TempDB->new($ENV{TEST_PG_DSN});
 undef $tempdb;    # should normally drop database
 

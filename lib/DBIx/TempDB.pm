@@ -111,8 +111,10 @@ sub create_database {
   while (++$guard < MAX_NUMBER_OF_TRIES) {
     $name = $self->_generate_database_name($guard);
     eval { $self->_create_database($name) } or next;
-    warn "[TempDB:$$] Created temp database $name\n" if DEBUG;
     $self->{database_name} = $name;
+    warn "[TempDB:$$] Created temp database $name\n" if DEBUG and !$ENV{DBIX_TEMP_DB_KEEP_DATABASE};
+    warn sprintf "[DBIx::TempDB] Created permanent database %s\n", +($self->dsn)[0]
+      if $ENV{DBIX_TEMP_DB_KEEP_DATABASE} and !$ENV{DBIX_TEMP_DB_SILENT};
     $self->_drop_from_child               if $self->{drop_from_child} == 1;
     $self->_drop_from_double_forked_child if $self->{drop_from_child} == 2;
     $self->{created}++;

@@ -1,5 +1,7 @@
 package DBIx::TempDB;
 
+=encoding UTF-8
+
 =head1 NAME
 
 DBIx::TempDB - Create a temporary database
@@ -59,7 +61,8 @@ use Mojo::URL;    # because I can't figure out how to use URI.pm
 use Sys::Hostname ();
 
 use constant CWD => eval { File::Basename::dirname(Cwd::abs_path($0)) };
-use constant DEBUG => $ENV{DBIX_TEMP_DB_DEBUG} || 0;
+use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG}               || 0;
+use constant KILL_SLEEP_INTERVAL => $ENV{DBIX_TEMP_DB_KILL_SLEEP_INTERVAL} || 2;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
 use constant MAX_OPEN_FDS => eval { use POSIX qw( sysconf _SC_OPEN_MAX ); sysconf(_SC_OPEN_MAX) } || 1024;
 
@@ -98,7 +101,8 @@ sub create_database {
     eval { $dbh->do("create database $name") } or next;
     warn "[TempDB:$$] Created temp database $name\n" if DEBUG;
     $self->{database_name} = $name;
-    $self->_drop_from_child if $self->{drop_from_child};
+    $self->_drop_from_child               if $self->{drop_from_child} == 1;
+    $self->_drop_from_double_forked_child if $self->{drop_from_child} == 2;
     $self->{created}++;
     $self->{url}->path($name);
     $ENV{DBIX_TEMP_DB_URL} = $self->{url}->to_string;
@@ -198,9 +202,20 @@ set to a false value.
 =item * drop_from_child
 
 Setting "drop_from_child" to a true value will create a child process which
-will remove the temporary database, when the main process ends.
+will remove the temporary database, when the main process ends. There are two
+possible values:
 
-TODO: This might become the default.
+C<drop_from_child=1> will create a child process which monitor the
+L<DBIx::TempDB> object with a pipe. This will then DROP the temp database if
+the object goes out of scope or if the process ends.
+
+TODO: C<drop_from_child=1> might become the default.
+
+C<drop_from_child=2> will create a child process detached from the parent,
+which monitor the parent with C<kill(0, $parent)>.
+
+The double fork code is based on a paste contributed by
+L<Easy Connect AS|http://easyconnect.no>, Knut Arne Bjørndal.
 
 =item * template
 
@@ -230,8 +245,9 @@ sub new {
     confess "Cannot generate temp database for '@{[$url->scheme]}'. $class\::$dsn_for() is missing";
   }
 
+  $self->{drop_from_child} ||= 0;
   $self->{schema_database} ||= $SCHEMA_DATABASE{$url->scheme};
-  $self->{template} ||= 'tmp_%U_%X_%H%i';
+  $self->{template}        ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
   return $self->create_database if $self->{auto_create} // 1;
@@ -254,6 +270,7 @@ sub url { shift->{url} }
 sub DESTROY {
   my $self = shift;
   return close $self->{DROP_PIPE} if $self->{DROP_PIPE};
+  return if $self->{double_forked};
   $_[0]->{created} and $_[0]->_cleanup;
 }
 
@@ -336,7 +353,7 @@ sub _drop_from_child {
   my $ppid = $$;
 
   pipe my $READ, $self->{DROP_PIPE} or confess "Could not create pipe: $!";
-  defined(my $pid = fork) or confess "Failed to fork: $!";
+  defined(my $pid = fork) or confess "Couldn't fork: $!";
 
   # parent
   return $self->{drop_pid} = $pid if $pid;
@@ -350,6 +367,38 @@ sub _drop_from_child {
   $DB::CreateTTY = 0;    # prevent debugger from creating terminals
   warn "[TempDB:$$] Waiting for $ppid to end\n" if DEBUG;
   1 while <$READ>;
+  $self->_cleanup;
+  exit 0;
+}
+
+sub _drop_from_double_forked_child {
+  my $self = shift;
+  my $ppid = $$;
+
+  local $SIG{CHLD} = 'DEFAULT';
+
+  defined(my $pid = fork) or confess "Couldn't fork: $!";
+
+  if ($pid) {
+
+    # Wait around until the second fork is done so that when we return from
+    # here there are no new child processes that could mess things up if the
+    # calling process does any process handling.
+    waitpid $pid, 0;
+    return $self->{double_forked} = $pid;    # could just be a boolean
+  }
+
+  # Stop the debugger from creating new terminals
+  $DB::CreateTTY = 0;
+
+  $0 = "drop_$self->{database_name}";
+
+  # Detach completely from parent by creating our own session and process
+  # group, closing all filehandles and forking a second time.
+  POSIX::setsid() != -1 or confess "Couldn't become session leader: $!\n";
+  POSIX::close($_) for 0 .. MAX_OPEN_FDS - 1;
+  POSIX::_exit(0) if fork // confess "Couldn't fork: $!";
+  sleep KILL_SLEEP_INTERVAL while kill 0, $ppid;
   $self->_cleanup;
   exit 0;
 }

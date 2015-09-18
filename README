@@ -2,7 +2,7 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.04
+    0.05
 
 SYNOPSIS
       use Test::More;
@@ -33,9 +33,11 @@ DESCRIPTION
     very convenient when you want to run tests in parallel, without messing
     up the state between tests.
 
-    This module currently support PostgreSQL and MySQL by installing the
-    optional modules DBD::Pg and/or DBD::mysql. Let me know if you want
-    another database to be supported.
+    This module currently support PostgreSQL, MySQL and SQLite by installing
+    the optional DBD::Pg, DBD::mysql and/or DBD::SQLite modules.
+
+    Please create an issue <https://github.com/jhthorsen/dbix-tempdb/issues>
+    or pull request for more backend support.
 
     This module is currently EXPERIMENTAL. That means that if any major
     design flaws have been made, they will be fixed without warning.
@@ -52,7 +54,8 @@ METHODS
     such as Mojo::Pg and Mojo::mysql.
 
     The database name generate is defined by the "template" parameter passed
-    to "new", with any non-word character replaced with "_".
+    to "new", but normalization will be done to make it work for the given
+    database.
 
   dsn
       ($dsn, $user, $pass, $attrs) = $self->dsn;
@@ -84,6 +87,7 @@ METHODS
       $self = DBIx::TempDB->new($url, %args);
       $self = DBIx::TempDB->new("mysql://127.0.0.1");
       $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
+      $self = DBIx::TempDB->new("sqlite://");
 
     Creates a new object after checking the $url is valid. %args can be:
 

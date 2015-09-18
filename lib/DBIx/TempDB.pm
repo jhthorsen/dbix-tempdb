@@ -347,6 +347,7 @@ sub _drop_from_child {
     POSIX::close($_);
   }
 
+  $DB::CreateTTY = 0;    # prevent debugger from creating terminals
   warn "[TempDB:$$] Waiting for $ppid to end\n" if DEBUG;
   1 while <$READ>;
   $self->_cleanup;

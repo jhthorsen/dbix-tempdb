@@ -10,7 +10,7 @@ my @dsn;
   my $tmpdb         = DBIx::TempDB->new($ENV{TEST_PG_DSN}, drop_from_child => 1);
   my @dsn           = $tmpdb->dsn;
   my $dbh           = DBI->connect(@dsn);
-  my $database_name = $tmpdb->url->path->parts->[0];
+  my $database_name = $tmpdb->url->dbname;
   is $dbh->{pg_db}, $database_name, "pg_db $database_name";
 }
 

@@ -1,5 +1,7 @@
 package DBIx::TempDB;
 
+=encoding UTF-8
+
 =head1 NAME
 
 DBIx::TempDB - Create a temporary database
@@ -59,7 +61,8 @@ use Mojo::URL;    # because I can't figure out how to use URI.pm
 use Sys::Hostname ();
 
 use constant CWD => eval { File::Basename::dirname(Cwd::abs_path($0)) };
-use constant DEBUG => $ENV{DBIX_TEMP_DB_DEBUG} || 0;
+use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG}               || 0;
+use constant KILL_SLEEP_INTERVAL => $ENV{DBIX_TEMP_DB_KILL_SLEEP_INTERVAL} || 2;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
 use constant MAX_OPEN_FDS => eval { use POSIX qw( sysconf _SC_OPEN_MAX ); sysconf(_SC_OPEN_MAX) } || 1024;
 
@@ -98,7 +101,8 @@ sub create_database {
     eval { $dbh->do("create database $name") } or next;
     warn "[TempDB:$$] Created temp database $name\n" if DEBUG;
     $self->{database_name} = $name;
-    $self->_drop_from_child if $self->{drop_from_child};
+    $self->_drop_from_child               if $self->{drop_from_child} == 1;
+    $self->_drop_from_double_forked_child if $self->{drop_from_child} == 2;
     $self->{created}++;
     $self->{url}->path($name);
     $ENV{DBIX_TEMP_DB_URL} = $self->{url}->to_string;
@@ -198,9 +202,20 @@ set to a false value.
 =item * drop_from_child
 
 Setting "drop_from_child" to a true value will create a child process which
-will remove the temporary database, when the main process ends.
+will remove the temporary database, when the main process ends. There are two
+possible values:
 
-TODO: This might become the default.
+C<drop_from_child=1> will create a child process which monitor the
+L<DBIx::TempDB> object with a pipe. This will then DROP the temp database if
+the object goes out of scope or if the process ends.
+
+TODO: C<drop_from_child=1> might become the default.
+
+C<drop_from_child=2> will create a child process detached from the parent,
+which monitor the parent with C<kill(0, $parent)>.
+
+The double fork code is based on a paste contributed by
+L<Connect AS|http://easyconnect.no>, Knut Arne Bjørndal.
 
 =item * template
 
@@ -230,8 +245,9 @@ sub new {
     confess "Cannot generate temp database for '@{[$url->scheme]}'. $class\::$dsn_for() is missing";
   }
 
+  $self->{drop_from_child} ||= 0;
   $self->{schema_database} ||= $SCHEMA_DATABASE{$url->scheme};
-  $self->{template} ||= 'tmp_%U_%X_%H%i';
+  $self->{template}        ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
   return $self->create_database if $self->{auto_create} // 1;
@@ -254,6 +270,7 @@ sub url { shift->{url} }
 sub DESTROY {
   my $self = shift;
   return close $self->{DROP_PIPE} if $self->{DROP_PIPE};
+  return if $self->{double_forked};
   $_[0]->{created} and $_[0]->_cleanup;
 }
 
@@ -313,7 +330,7 @@ sub _generate_database_name {
 
   $name =~ s/\%([iHPTUX])/{
       $1 eq 'i' ? ($n > 0 ? "_$n" : '')
-    : $1 eq 'H' ? Sys::Hostname::hostname()
+    : $1 eq 'H' ? $self->_hostname
     : $1 eq 'P' ? $$
     : $1 eq 'T' ? $^T
     : $1 eq 'U' ? $<
@@ -321,14 +338,22 @@ sub _generate_database_name {
     :             "\%$1"
   }/egx;
 
+  if (63 < length $name and !$self->{keep_too_long_database_name}) {
+         $self->{template} =~ s!\%T!!g
+      or $self->{template} =~ s!\%H!!g
+      or $self->{template} =~ s!\%X!!g
+      or confess "Uable to create shorter database anme.";
+    warn "!!! Database name '$name' is too long! Forcing a shorter template: $self->{template}"
+      if !$ENV{HARNESS_ACTIVE} or $ENV{HARNESS_VERBOSE};
+    return $self->_generate_database_name($n);
+  }
+
   $name =~ s!\W!_!g;
   $name;
 }
 
-sub _schema_dsn {
-  my $self = shift;
-  local $self->{database_name} = $self->{schema_database};
-  return $self->dsn;
+sub _hostname {
+  shift->{hostname} ||= Sys::Hostname::hostname();
 }
 
 sub _drop_from_child {
@@ -336,7 +361,7 @@ sub _drop_from_child {
   my $ppid = $$;
 
   pipe my $READ, $self->{DROP_PIPE} or confess "Could not create pipe: $!";
-  defined(my $pid = fork) or confess "Failed to fork: $!";
+  defined(my $pid = fork) or confess "Couldn't fork: $!";
 
   # parent
   return $self->{drop_pid} = $pid if $pid;
@@ -352,6 +377,44 @@ sub _drop_from_child {
   1 while <$READ>;
   $self->_cleanup;
   exit 0;
+}
+
+sub _drop_from_double_forked_child {
+  my $self = shift;
+  my $ppid = $$;
+
+  local $SIG{CHLD} = 'DEFAULT';
+
+  defined(my $pid = fork) or confess "Couldn't fork: $!";
+
+  if ($pid) {
+
+    # Wait around until the second fork is done so that when we return from
+    # here there are no new child processes that could mess things up if the
+    # calling process does any process handling.
+    waitpid $pid, 0;
+    return $self->{double_forked} = $pid;    # could just be a boolean
+  }
+
+  # Stop the debugger from creating new terminals
+  $DB::CreateTTY = 0;
+
+  $0 = "drop_$self->{database_name}";
+
+  # Detach completely from parent by creating our own session and process
+  # group, closing all filehandles and forking a second time.
+  POSIX::setsid() != -1 or confess "Couldn't become session leader: $!\n";
+  POSIX::close($_) for 0 .. MAX_OPEN_FDS - 1;
+  POSIX::_exit(0) if fork // confess "Couldn't fork: $!";
+  sleep KILL_SLEEP_INTERVAL while kill 0, $ppid;
+  $self->_cleanup;
+  exit 0;
+}
+
+sub _schema_dsn {
+  my $self = shift;
+  local $self->{database_name} = $self->{schema_database};
+  return $self->dsn;
 }
 
 =head1 COPYRIGHT AND LICENSE

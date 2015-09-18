@@ -97,9 +97,6 @@ This method will create a temp database for the current process. Calling this
 method multiple times will simply do nothing. This method is normally
 automatically called by L</new>.
 
-This method will also set C<DBIX_TEMP_DB_URL> to a URL suited for modules
-such as L<Mojo::Pg> and L<Mojo::mysql>.
-
 The database name generate is defined by the L</template> parameter passed to
 L</new>, but normalization will be done to make it work for the given database.
 
@@ -276,10 +273,12 @@ sub new {
 
   $url = $self->url;
 
-Returns the input URL as L<URL> object, with L<path|URL/path> set to the temp
-database name.
+Returns the input URL as L<Mojo::URL> compatible object. This URL will have
+the L<path|Mojo::URL/path> part set to the database from L</create_database>,
+but not I<until> after L</create_database> is actually called.
 
-Note that this method cannot be called before L</create_database> is called.
+The URL returned can be passed directly to modules such as L<Mojo::Pg>
+and L<Mojo::mysql>.
 
 =cut
 

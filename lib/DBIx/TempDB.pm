@@ -87,6 +87,8 @@ our $VERSION = '0.06';
 
 our %SCHEMA_DATABASE = (postgresql => 'postgres', mysql => 'mysql');
 
+my $START_DB_INDEX = 0;
+
 =head1 METHODS
 
 =head2 create_database
@@ -109,7 +111,7 @@ sub create_database {
 
   local $@;
   while (++$guard < MAX_NUMBER_OF_TRIES) {
-    $name = $self->_generate_database_name($guard);
+    $name = $self->_generate_database_name($START_DB_INDEX + $guard);
     eval { $self->_create_database($name) } or next;
     $self->{database_name} = $name;
     warn "[TempDB:$$] Created temp database $name\n" if DEBUG and !$ENV{DBIX_TEMP_DB_KEEP_DATABASE};
@@ -120,6 +122,7 @@ sub create_database {
     $self->{created}++;
     $self->{url}->path($name);
     $ENV{DBIX_TEMP_DB_URL} = $self->{url}->to_string;
+    $START_DB_INDEX++;
     return $self;
   }
 

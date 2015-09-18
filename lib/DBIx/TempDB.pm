@@ -41,9 +41,11 @@ which only lives as long as your process is alive. This can be very
 convenient when you want to run tests in parallel, without messing up the
 state between tests.
 
-This module currently support PostgreSQL and MySQL by installing the optional
-modules L<DBD::Pg> and/or L<DBD::mysql>. Let me know if you want another
-database to be supported.
+This module currently support PostgreSQL, MySQL and SQLite by installing the optional
+L<DBD::Pg>, L<DBD::mysql> and/or L<DBD::SQLite> modules.
+
+Please create an L<issue|https://github.com/jhthorsen/dbix-tempdb/issues>
+or pull request for more backend support.
 
 This module is currently EXPERIMENTAL. That means that if any major design
 flaws have been made, they will be fixed without warning.
@@ -84,21 +86,19 @@ This method will also set C<DBIX_TEMP_DB_URL> to a URL suited for modules
 such as L<Mojo::Pg> and L<Mojo::mysql>.
 
 The database name generate is defined by the L</template> parameter passed to
-L</new>, with any non-word character replaced with "_".
+L</new>, but normalization will be done to make it work for the given database.
 
 =cut
 
 sub create_database {
   return $_[0] if $_[0]->{created};
-
   my $self = shift;
-  my $dbh  = DBI->connect($self->_schema_dsn);
   my ($guard, $name);
 
   local $@;
   while (++$guard < MAX_NUMBER_OF_TRIES) {
     $name = $self->_generate_database_name($guard);
-    eval { $dbh->do("create database $name") } or next;
+    eval { $self->_create_database($name) } or next;
     warn "[TempDB:$$] Created temp database $name\n" if DEBUG;
     $self->{database_name} = $name;
     $self->_drop_from_child               if $self->{drop_from_child} == 1;
@@ -131,7 +131,7 @@ sub dsn {
 
   if (!ref $self and $url) {
     $url = Mojo::URL->new($url) unless ref $url;
-    $self->can(sprintf '_dsn_for_%s', $url->scheme)->($self, $url, $url->path->parts->[0]);
+    $self->can(sprintf '_dsn_for_%s', $url->scheme)->($self, $url, $url->path->to_string);
   }
   else {
     confess 'Cannot return DSN before create_database() is called.' unless $self->{database_name};
@@ -189,6 +189,7 @@ sub execute_file {
   $self = DBIx::TempDB->new($url, %args);
   $self = DBIx::TempDB->new("mysql://127.0.0.1");
   $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
+  $self = DBIx::TempDB->new("sqlite://");
 
 Creates a new object after checking the C<$url> is valid. C<%args> can be:
 
@@ -270,27 +271,46 @@ sub url { shift->{url} }
 sub DESTROY {
   my $self = shift;
   return close $self->{DROP_PIPE} if $self->{DROP_PIPE};
-  return if $self->{double_forked};
-  $_[0]->{created} and $_[0]->_cleanup;
+  return                          if $self->{double_forked};
+  return $self->_cleanup          if $self->{created};
 }
 
 sub _cleanup {
   my $self = shift;
-  my $dbh  = DBI->connect($self->_schema_dsn);
 
   eval {
-    $dbh->do("drop database $self->{database_name}");
+    if ($self->url->scheme eq 'sqlite') {
+      unlink $self->{database_name} or die $!;
+    }
+    else {
+      DBI->connect($self->_schema_dsn)->do("drop database $self->{database_name}");
+    }
     1;
   } or do {
     die "[$$] Unable to drop $self->{database_name}: $@";
   };
 }
 
+sub _create_database {
+  my ($self, $name) = @_;
+
+  if ($self->url->scheme eq 'sqlite') {
+    require IO::File;
+    use Fcntl qw( O_CREAT O_EXCL O_RDWR );
+    IO::File->new->open($name, O_CREAT | O_EXCL | O_RDWR) or die "open $name O_CREAT|O_EXCL|O_RDWR: $!\n";
+  }
+  else {
+    DBI->connect($self->_schema_dsn)->do("create database $name");
+  }
+}
+
 sub _dsn_for_postgresql {
   my ($class, $url, $database_name) = @_;
   my %opt = %{$url->query->to_hash};
-  my $dsn = "dbi:Pg:dbname=$database_name";
-  my @userinfo;
+  my ($dsn, @userinfo);
+
+  $database_name =~ s!^/+!!;
+  $dsn = "dbi:Pg:dbname=$database_name";
 
   if (my $host = $url->host) { $dsn .= ";host=$host" }
   if (my $port = $url->port) { $dsn .= ";port=$port" }
@@ -308,8 +328,10 @@ sub _dsn_for_postgresql {
 sub _dsn_for_mysql {
   my ($class, $url, $database_name) = @_;
   my %opt = %{$url->query->to_hash};
-  my $dsn = "dbi:mysql:dbname=$database_name";
-  my @userinfo;
+  my ($dsn, @userinfo);
+
+  $database_name =~ s!^/+!!;
+  $dsn = "dbi:mysql:dbname=$database_name";
 
   if (my $host = $url->host) { $dsn .= ";host=$host" }
   if (my $port = $url->port) { $dsn .= ";port=$port" }
@@ -322,6 +344,19 @@ sub _dsn_for_mysql {
   $opt{mysql_enable_utf8}   //= 1;
 
   return $dsn, @userinfo[0, 1], \%opt;
+}
+
+sub _dsn_for_sqlite {
+  my ($class, $url, $database_name) = @_;
+  my %opt = %{$url->query->to_hash};
+
+  $opt{AutoCommit}          //= 1;
+  $opt{AutoInactiveDestroy} //= 1;
+  $opt{PrintError}          //= 0;
+  $opt{RaiseError}          //= 1;
+  $opt{sqlite_unicode}      //= 1;
+
+  return "dbi:SQLite:dbname=$database_name", "", "", \%opt;
 }
 
 sub _generate_database_name {
@@ -348,8 +383,11 @@ sub _generate_database_name {
     return $self->_generate_database_name($n);
   }
 
+  $name =~ s!^/+!!;
   $name =~ s!\W!_!g;
-  $name;
+
+  return $name if $self->url->scheme ne 'sqlite';
+  return File::Spec->catfile($self->_tempdir, "$name.sqlite");
 }
 
 sub _hostname {
@@ -415,6 +453,10 @@ sub _schema_dsn {
   my $self = shift;
   local $self->{database_name} = $self->{schema_database};
   return $self->dsn;
+}
+
+sub _tempdir {
+  shift->{tempdir} ||= File::Spec->tmpdir;
 }
 
 =head1 COPYRIGHT AND LICENSE

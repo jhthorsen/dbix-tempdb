@@ -1,6 +1,6 @@
 Revision history for perl distribution DBIx-TempDB
 
-0.06 Not Released
+0.06 2015-09-18T14:52:06+0200
  - Add support for DBIX_TEMP_DB_KEEP_DATABASE=1
 
 0.05 2015-09-18T14:00:30+0200

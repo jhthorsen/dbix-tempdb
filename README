@@ -2,7 +2,7 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.05
+    0.06
 
 SYNOPSIS
       use Test::More;
@@ -42,6 +42,18 @@ DESCRIPTION
     This module is currently EXPERIMENTAL. That means that if any major
     design flaws have been made, they will be fixed without warning.
 
+ENVIRONMENT VARIABLES
+  DBIX_TEMP_DB_KEEP_DATABASE
+    Setting this variable will disable the core feature in this module: A
+    unique database will be created, but it will not get dropped/deleted.
+
+  DBIX_TEMP_DB_URL
+    This variable is set by "create_database" and contains the complete URL
+    pointing to the temporary database.
+
+    Note that calling "create_database" on different instances of
+    DBIx::TempDB will overwrite "DBIX_TEMP_DB_URL".
+
 METHODS
   create_database
       $self = $self->create_database;
@@ -49,9 +61,6 @@ METHODS
     This method will create a temp database for the current process. Calling
     this method multiple times will simply do nothing. This method is
     normally automatically called by "new".
-
-    This method will also set "DBIX_TEMP_DB_URL" to a URL suited for modules
-    such as Mojo::Pg and Mojo::mysql.
 
     The database name generate is defined by the "template" parameter passed
     to "new", but normalization will be done to make it work for the given
@@ -131,11 +140,12 @@ METHODS
   url
       $url = $self->url;
 
-    Returns the input URL as URL object, with path set to the temp database
-    name.
+    Returns the input URL as Mojo::URL compatible object. This URL will have
+    the path part set to the database from "create_database", but not
+    *until* after "create_database" is actually called.
 
-    Note that this method cannot be called before "create_database" is
-    called.
+    The URL returned can be passed directly to modules such as Mojo::Pg and
+    Mojo::mysql.
 
 COPYRIGHT AND LICENSE
     Copyright (C) 2015, Jan Henning Thorsen

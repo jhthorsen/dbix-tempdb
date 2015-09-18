@@ -80,8 +80,8 @@ automatically called by L</new>.
 This method will also set C<DBIX_TEMP_DB_URL> to a URL suited for modules
 such as L<Mojo::Pg> and L<Mojo::mysql>.
 
-The database name generated is subject to change, but currently it looks like
-something like this: C<tmp_${UID}_${0}_${HOSTNAME}>.
+The database name generate is defined by the L</template> parameter passed to
+L</new>, with any non-word character replaced with "_".
 
 =cut
 
@@ -202,6 +202,20 @@ will remove the temporary database, when the main process ends.
 
 TODO: This might become the default.
 
+=item * template
+
+Customize the generated database name. Default template is "tmp_%U_%X_%H%i".
+Possible variables to expand are:
+
+  %i = The number of tries if tries are higher than 0. Example: "_3"
+  %H = Hostname
+  %P = Process ID ($$)
+  %T = Process start time ($^T)
+  %U = UID of current user
+  %X = Basename of executable
+
+The default is subject to change!
+
 =back
 
 =cut
@@ -217,6 +231,7 @@ sub new {
   }
 
   $self->{schema_database} ||= $SCHEMA_DATABASE{$url->scheme};
+  $self->{template} ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
   return $self->create_database if $self->{auto_create} // 1;
@@ -294,10 +309,20 @@ sub _dsn_for_mysql {
 
 sub _generate_database_name {
   my ($self, $n) = @_;
-  my @name = ('tmp', $<, File::Basename::basename($0), Sys::Hostname::hostname);
+  my $name = $self->{template};
 
-  push @name, $n if $n > 0;
-  return join '_', map { s!\W!_!g; $_ } @name;
+  $name =~ s/\%([iHPTUX])/{
+      $1 eq 'i' ? ($n > 0 ? "_$n" : '')
+    : $1 eq 'H' ? Sys::Hostname::hostname()
+    : $1 eq 'P' ? $$
+    : $1 eq 'T' ? $^T
+    : $1 eq 'U' ? $<
+    : $1 eq 'X' ? File::Basename::basename($0)
+    :             "\%$1"
+  }/egx;
+
+  $name =~ s!\W!_!g;
+  $name;
 }
 
 sub _schema_dsn {

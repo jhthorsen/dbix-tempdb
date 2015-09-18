@@ -1,5 +1,8 @@
 Revision history for perl distribution DBIx-TempDB
 
+0.04 Not Released
+ - Add support for "template"
+
 0.03 2015-09-17T21:59:16+0200
  - Add support for "drop_from_child"
 

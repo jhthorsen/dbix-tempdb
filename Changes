@@ -1,6 +1,6 @@
 Revision history for perl distribution DBIx-TempDB
 
-0.04 Not Released
+0.04 2015-09-18T11:50:41+0200
  - Add support for "template"
  - Add drop_from_child=2, which monitor parent with a double forked process
  - Fix max length for database name is 63 characters (Pg=63, MySQL=64)

@@ -2,7 +2,7 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.03
+    0.04
 
 SYNOPSIS
       use Test::More;
@@ -51,8 +51,8 @@ METHODS
     This method will also set "DBIX_TEMP_DB_URL" to a URL suited for modules
     such as Mojo::Pg and Mojo::mysql.
 
-    The database name generated is subject to change, but currently it looks
-    like something like this: "tmp_${UID}_${0}_${HOSTNAME}".
+    The database name generate is defined by the "template" parameter passed
+    to "new", with any non-word character replaced with "_".
 
   dsn
       ($dsn, $user, $pass, $attrs) = $self->dsn;
@@ -96,9 +96,33 @@ METHODS
 
         Setting "drop_from_child" to a true value will create a child
         process which will remove the temporary database, when the main
-        process ends.
+        process ends. There are two possible values:
 
-        TODO: This might become the default.
+        "drop_from_child=1" will create a child process which monitor the
+        DBIx::TempDB object with a pipe. This will then DROP the temp
+        database if the object goes out of scope or if the process ends.
+
+        TODO: "drop_from_child=1" might become the default.
+
+        "drop_from_child=2" will create a child process detached from the
+        parent, which monitor the parent with "kill(0, $parent)".
+
+        The double fork code is based on a paste contributed by Easy Connect
+        AS <http://easyconnect.no>, Knut Arne Bjørndal.
+
+    *   template
+
+        Customize the generated database name. Default template is
+        "tmp_%U_%X_%H%i". Possible variables to expand are:
+
+          %i = The number of tries if tries are higher than 0. Example: "_3"
+          %H = Hostname
+          %P = Process ID ($$)
+          %T = Process start time ($^T)
+          %U = UID of current user
+          %X = Basename of executable
+
+        The default is subject to change!
 
   url
       $url = $self->url;

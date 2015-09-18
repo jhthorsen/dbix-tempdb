@@ -330,7 +330,7 @@ sub _generate_database_name {
 
   $name =~ s/\%([iHPTUX])/{
       $1 eq 'i' ? ($n > 0 ? "_$n" : '')
-    : $1 eq 'H' ? Sys::Hostname::hostname()
+    : $1 eq 'H' ? $self->_hostname
     : $1 eq 'P' ? $$
     : $1 eq 'T' ? $^T
     : $1 eq 'U' ? $<
@@ -338,14 +338,22 @@ sub _generate_database_name {
     :             "\%$1"
   }/egx;
 
+  if (63 < length $name and !$self->{keep_too_long_database_name}) {
+         $self->{template} =~ s!\%T!!g
+      or $self->{template} =~ s!\%H!!g
+      or $self->{template} =~ s!\%X!!g
+      or confess "Uable to create shorter database anme.";
+    warn "!!! Database name '$name' is too long! Forcing a shorter template: $self->{template}"
+      if !$ENV{HARNESS_ACTIVE} or $ENV{HARNESS_VERBOSE};
+    return $self->_generate_database_name($n);
+  }
+
   $name =~ s!\W!_!g;
   $name;
 }
 
-sub _schema_dsn {
-  my $self = shift;
-  local $self->{database_name} = $self->{schema_database};
-  return $self->dsn;
+sub _hostname {
+  shift->{hostname} ||= Sys::Hostname::hostname();
 }
 
 sub _drop_from_child {
@@ -401,6 +409,12 @@ sub _drop_from_double_forked_child {
   sleep KILL_SLEEP_INTERVAL while kill 0, $ppid;
   $self->_cleanup;
   exit 0;
+}
+
+sub _schema_dsn {
+  my $self = shift;
+  local $self->{database_name} = $self->{schema_database};
+  return $self->dsn;
 }
 
 =head1 COPYRIGHT AND LICENSE

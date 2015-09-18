@@ -2,7 +2,7 @@ use strict;
 use Test::More;
 use DBIx::TempDB;
 
-my $tmpdb    = DBIx::TempDB->new('postgresql://example.com', auto_create => 0);
+my $tmpdb    = DBIx::TempDB->new('postgresql://example.com', auto_create => 0, keep_too_long_database_name => 1);
 my $exe      = File::Basename::basename($0);
 my $hostname = Sys::Hostname::hostname();
 my $uid      = $<;

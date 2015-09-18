@@ -74,9 +74,10 @@ use Cwd ();
 use DBI;
 use File::Basename ();
 use File::Spec;
+use IO::Handle ();
+use Sys::Hostname ();
 use URI::db;
 use URI::QueryParam;
-use Sys::Hostname ();
 
 use constant CWD => eval { File::Basename::dirname(Cwd::abs_path($0)) };
 use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG}               || 0;

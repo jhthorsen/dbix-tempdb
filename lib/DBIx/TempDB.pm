@@ -50,6 +50,21 @@ or pull request for more backend support.
 This module is currently EXPERIMENTAL. That means that if any major design
 flaws have been made, they will be fixed without warning.
 
+=head1 ENVIRONMENT VARIABLES
+
+=head2 DBIX_TEMP_DB_KEEP_DATABASE
+
+Setting this variable will disable the core feature in this module:
+A unique database will be created, but it will not get dropped/deleted.
+
+=head2 DBIX_TEMP_DB_URL
+
+This variable is set by L</create_database> and contains the complete
+URL pointing to the temporary database.
+
+Note that calling L</create_database> on different instances of
+L<DBIx::TempDB> will overwrite C<DBIX_TEMP_DB_URL>.
+
 =cut
 
 use strict;
@@ -251,6 +266,8 @@ sub new {
   $self->{template}        ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
+  $self->{drop_from_child} = 0 if $ENV{DBIX_TEMP_DB_KEEP_DATABASE};
+
   return $self->create_database if $self->{auto_create} // 1;
   return $self;
 }
@@ -271,6 +288,7 @@ sub url { shift->{url} }
 sub DESTROY {
   my $self = shift;
   return close $self->{DROP_PIPE} if $self->{DROP_PIPE};
+  return                          if $ENV{DBIX_TEMP_DB_KEEP_DATABASE};
   return                          if $self->{double_forked};
   return $self->_cleanup          if $self->{created};
 }

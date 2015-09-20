@@ -8,7 +8,7 @@ DBIx::TempDB - Create a temporary database
 
 =head1 VERSION
 
-0.06
+0.07
 
 =head1 SYNOPSIS
 
@@ -74,7 +74,7 @@ use Cwd ();
 use DBI;
 use File::Basename ();
 use File::Spec;
-use IO::Handle ();
+use IO::Handle    ();
 use Sys::Hostname ();
 use URI::db;
 use URI::QueryParam;
@@ -85,7 +85,7 @@ use constant KILL_SLEEP_INTERVAL => $ENV{DBIX_TEMP_DB_KILL_SLEEP_INTERVAL} || 2;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
 use constant MAX_OPEN_FDS => eval { use POSIX qw( sysconf _SC_OPEN_MAX ); sysconf(_SC_OPEN_MAX) } || 1024;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql');
 
@@ -259,12 +259,12 @@ The default is subject to change!
 =cut
 
 sub new {
-  my $class   = shift;
-  my $url     = URI::db->new(shift || '');
+  my $class = shift;
+  my $url = URI::db->new(shift || '');
   unless ($url->has_recognized_engine) {
     confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url";
   }
-  my $self    = bless {@_, url => $url}, $class;
+  my $self = bless {@_, url => $url}, $class;
   my $dsn_for = sprintf '_dsn_for_%s', $url->canonical_engine || '';
 
   unless ($self->can($dsn_for)) {

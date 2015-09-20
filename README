@@ -2,7 +2,7 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.06
+    0.07
 
 SYNOPSIS
       use Test::More;
@@ -75,7 +75,7 @@ METHODS
 
     Note that this method cannot be called as an object method before
     "create_database" is called. You can on the other hand call it as a
-    class method, with an Mojo::URL or URL string as input.
+    class method, with a URI::db or URL string as input.
 
   execute
       $self = $self->execute($sql);
@@ -140,8 +140,8 @@ METHODS
   url
       $url = $self->url;
 
-    Returns the input URL as Mojo::URL compatible object. This URL will have
-    the path part set to the database from "create_database", but not
+    Returns the input URL as URI::db compatible object. This URL will have
+    the dbname part set to the database from "create_database", but not
     *until* after "create_database" is actually called.
 
     The URL returned can be passed directly to modules such as Mojo::Pg and

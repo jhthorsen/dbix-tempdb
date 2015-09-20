@@ -7,7 +7,7 @@ plan skip_all => 'Need nix OS' if $^O =~ /win32/i;
 my $path = File::Spec->catfile(File::Spec->tmpdir, 'foo.sqlite');
 ok !-e $path, 'sqlite does not exist';
 
-my $tmpdb = DBIx::TempDB->new('sqlite://', template => 'foo');
+my $tmpdb = DBIx::TempDB->new('sqlite:', template => 'foo');
 is $tmpdb->url->dbname, $path, 'dbname';
 
 is_deeply(

@@ -211,7 +211,7 @@ sub execute_file {
   $self = DBIx::TempDB->new($url, %args);
   $self = DBIx::TempDB->new("mysql://127.0.0.1");
   $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
-  $self = DBIx::TempDB->new("sqlite://");
+  $self = DBIx::TempDB->new("sqlite:");
 
 Creates a new object after checking the C<$url> is valid. C<%args> can be:
 

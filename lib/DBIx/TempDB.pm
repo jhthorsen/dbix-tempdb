@@ -173,8 +173,8 @@ SQL server.
 sub execute {
   my ($self, $sql) = @_;
   my $dbh = DBI->connect($self->dsn);
-  my $sth = $dbh->prepare($sql);
-  $sth->execute;
+  local $dbh->{sqlite_allow_multiple_statements} = 1 if $self->url->canonical_engine eq 'sqlite';
+  $dbh->do($sql);
   $self;
 }
 

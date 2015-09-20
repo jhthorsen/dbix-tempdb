@@ -5,7 +5,7 @@ use DBIx::TempDB;
 plan skip_all => 'TEST_MYSQL_DSN=mysql://localhost' unless $ENV{TEST_MYSQL_DSN};
 
 my $tmpdb         = DBIx::TempDB->new($ENV{TEST_MYSQL_DSN});
-my $database_name = $tmpdb->url->path->parts->[0];
+my $database_name = $tmpdb->url->dbname;
 my $dbh           = DBI->connect($tmpdb->dsn);
 
 my $sth = $dbh->prepare('select database()');

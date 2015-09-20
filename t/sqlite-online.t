@@ -8,7 +8,7 @@ my $path = File::Spec->catfile(File::Spec->tmpdir, 'foo.sqlite');
 ok !-e $path, 'sqlite does not exist';
 
 my $tmpdb = DBIx::TempDB->new('sqlite://', template => 'foo');
-is $tmpdb->url, "sqlite://$path", 'url';
+is $tmpdb->url->dbname, $path, 'dbname';
 
 is_deeply(
   [$tmpdb->dsn],

@@ -8,7 +8,7 @@ my $tmpdb = DBIx::TempDB->new($ENV{TEST_PG_DSN}, auto_create => 0);
 is $ENV{DBIX_TEMP_DB_URL}, undef, 'DBIX_TEMP_DB_URL is not set';
 
 $tmpdb->create_database;
-my $database_name = $tmpdb->url->path->parts->[0];
+my $database_name = $tmpdb->url->dbname;
 is $ENV{DBIX_TEMP_DB_URL}, "$ENV{TEST_PG_DSN}/$database_name", 'DBIX_TEMP_DB_URL is set';
 
 my $dbh = DBI->connect($tmpdb->dsn);

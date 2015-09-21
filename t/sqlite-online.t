@@ -2,27 +2,31 @@ use strict;
 use Test::More;
 use DBIx::TempDB;
 
-plan skip_all => 'Need nix OS' if $^O =~ /win32/i;
+plan skip_all => 'cpanm DBD::SQLite' unless eval 'require DBD::SQLite;1';
 
-my $path = File::Spec->catfile(File::Spec->tmpdir, 'foo.sqlite');
-ok !-e $path, 'sqlite does not exist';
+my $tmpdb = DBIx::TempDB->new('sqlite://');
+my $dbh   = DBI->connect($tmpdb->dsn);
 
-my $tmpdb = DBIx::TempDB->new('sqlite://', template => 'foo');
-is $tmpdb->url->dbname, $path, 'dbname';
+eval {
+  $tmpdb->execute(<<'HERE') };
+-- comment
+create table users (name text);
+insert into users (name) values ('batman');
+insert into users (name) values ('bruce');
 
-is_deeply(
-  [$tmpdb->dsn],
-  [
-    "dbi:SQLite:dbname=$path", "", "",
-    {AutoCommit => 1, AutoInactiveDestroy => 1, PrintError => 0, RaiseError => 1, sqlite_unicode => 1}
-  ],
-  'dsn for foo'
-);
+-- comment
+insert into users values ('wayne');
 
-ok -e $path, 'sqlite db created';
-is -s $path, 0, 'sqlite db is empty';
+-- comment
+create table whatever (foo text);
+-- comment
+HERE
 
-undef $tmpdb;
-ok !-e $path, 'sqlite cleaned up';
+ok !$@, 'multiple statements ok' or diag $@;
+
+my $sth = $dbh->prepare("select name from users where name = 'batman'");
+$sth->execute;
+eval { $sth->fetchrow_arrayref->[0] };
+ok !$@, 'and multiple statements was actually executed' or diag $@;
 
 done_testing;

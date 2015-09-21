@@ -4,7 +4,7 @@ use DBIx::TempDB;
 
 plan skip_all => 'cpanm DBD::SQLite' unless eval 'require DBD::SQLite;1';
 
-my $tmpdb = DBIx::TempDB->new('sqlite://');
+my $tmpdb = DBIx::TempDB->new('sqlite:');
 my $dbh   = DBI->connect($tmpdb->dsn);
 
 eval {

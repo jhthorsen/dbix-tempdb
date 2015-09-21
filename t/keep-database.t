@@ -3,7 +3,7 @@ use Test::More;
 use DBIx::TempDB;
 use URI::db;
 
-plan skip_all => 'TEST_PG_DSN=postgresql://localhost' unless $ENV{TEST_PG_DSN};
+plan skip_all => 'TEST_PG_DSN=postgresql://postgres@localhost' unless $ENV{TEST_PG_DSN};
 
 $ENV{DBIX_TEMP_DB_KEEP_DATABASE} = 1;
 $ENV{DBIX_TEMP_DB_SILENT} //= 1;

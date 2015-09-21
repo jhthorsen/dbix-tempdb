@@ -2,7 +2,7 @@ use strict;
 use Test::More;
 use DBIx::TempDB;
 
-plan skip_all => 'TEST_MYSQL_DSN=mysql://localhost' unless $ENV{TEST_MYSQL_DSN};
+plan skip_all => 'TEST_MYSQL_DSN=mysql://root@127.0.0.1' unless $ENV{TEST_MYSQL_DSN};
 
 my $tmpdb         = DBIx::TempDB->new($ENV{TEST_MYSQL_DSN});
 my $database_name = $tmpdb->url->dbname;

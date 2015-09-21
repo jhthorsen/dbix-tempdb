@@ -2,7 +2,7 @@ use strict;
 use Test::More;
 use DBIx::TempDB;
 
-plan skip_all => 'TEST_PG_DSN=postgresql://localhost' unless $ENV{TEST_PG_DSN};
+plan skip_all => 'TEST_PG_DSN=postgresql://postgres@localhost' unless $ENV{TEST_PG_DSN};
 
 my $database_name = DBIx::TempDB->new($ENV{TEST_PG_DSN}, auto_create => 0)->_generate_database_name(0);
 

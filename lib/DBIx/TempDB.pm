@@ -222,6 +222,30 @@ Creates a new object after checking the C<$url> is valid. C<%args> can be:
 L</create_database> will be called automatically, unless C<auto_create> is
 set to a false value.
 
+=item * create_database_command
+
+Can be set to a custom create database command in the database. The default is
+"create database %d", where %d will be replaced by the generated database name.
+
+For even more control, you can set this to a code ref which will be called like
+this:
+
+  $self->$cb($database_name);
+
+The default is subject to change.
+
+=item * drop_database_command
+
+Can be set to a custom drop database command in the database. The default is
+"drop database %d", where %d will be replaced by the generated database name.
+
+For even more control, you can set this to a code ref which will be called like
+this:
+
+  $self->$cb($database_name);
+
+The default is subject to change.
+
 =item * drop_from_child
 
 Setting "drop_from_child" to a true value will create a child process which
@@ -271,9 +295,11 @@ sub new {
     confess "Cannot generate temp database for '@{[$url->canonical_engine]}'. $class\::$dsn_for() is missing";
   }
 
-  $self->{drop_from_child} ||= 0;
-  $self->{schema_database} ||= $SCHEMA_DATABASE{$url->canonical_engine};
-  $self->{template}        ||= 'tmp_%U_%X_%H%i';
+  $self->{create_database_command} ||= 'create database %d';
+  $self->{drop_database_command}   ||= 'drop database %d';
+  $self->{drop_from_child}         ||= 0;
+  $self->{schema_database}         ||= $SCHEMA_DATABASE{$url->canonical_engine};
+  $self->{template}                ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
   $self->{drop_from_child} = 0 if $ENV{DBIX_TEMP_DB_KEEP_DATABASE};
@@ -309,11 +335,16 @@ sub _cleanup {
   my $self = shift;
 
   eval {
-    if ($self->url->canonical_engine eq 'sqlite') {
+    if (ref $self->{drop_database_command} eq 'CODE') {
+      $self->{drop_database_command}->($self, $self->{database_name});
+    }
+    elsif ($self->url->canonical_engine eq 'sqlite') {
       unlink $self->{database_name} or die $!;
     }
     else {
-      DBI->connect($self->_schema_dsn)->do("drop database $self->{database_name}");
+      my $sql = $self->{drop_database_command};
+      $sql =~ s!\%d!$self->{database_name}!g;
+      DBI->connect($self->_schema_dsn)->do($sql);
     }
     1;
   } or do {
@@ -324,13 +355,18 @@ sub _cleanup {
 sub _create_database {
   my ($self, $name) = @_;
 
-  if ($self->url->canonical_engine eq 'sqlite') {
+  if (ref $self->{create_database_command} eq 'CODE') {
+    $self->{create_database_command}->($self, $name);
+  }
+  elsif ($self->url->canonical_engine eq 'sqlite') {
     require IO::File;
     use Fcntl qw( O_CREAT O_EXCL O_RDWR );
     IO::File->new->open($name, O_CREAT | O_EXCL | O_RDWR) or die "open $name O_CREAT|O_EXCL|O_RDWR: $!\n";
   }
   else {
-    DBI->connect($self->_schema_dsn)->do("create database $name");
+    my $sql = $self->{create_database_command};
+    $sql =~ s!\%d!$name!g;
+    DBI->connect($self->_schema_dsn)->do($sql);
   }
 }
 

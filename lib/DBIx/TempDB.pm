@@ -50,6 +50,15 @@ or pull request for more backend support.
 This module is currently EXPERIMENTAL. That means that if any major design
 flaws have been made, they will be fixed without warning.
 
+=head1 CAVEAT
+
+Creating a database is easy, but making sure it gets clean up when your
+process exit is a totally different ball game. This means that
+L<DBIx::TempDB> might fill up your server with random databases, unless
+you choose the right "drop strategy". Have a look at the L</drop_from_child>
+parameter you can give to L</new> and test the different values and select
+the one that works for you.
+
 =head1 ENVIRONMENT VARIABLES
 
 =head2 DBIX_TEMP_DB_KEEP_DATABASE

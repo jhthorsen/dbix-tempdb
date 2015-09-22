@@ -1,6 +1,8 @@
 Revision history for perl distribution DBIx-TempDB
 
 0.08 Not Released
+ - Fix running multiple commands in MySQL using execute()
+   The parser code is taken from Mojo::mysql, written by Svetoslav Naydenov
  - Add support for custom "create_database_command"
  - Add support for custom "drop_database_command"
  - Allow execute of multiple statements by SQLite driver #6

@@ -173,8 +173,9 @@ SQL server.
 sub execute {
   my ($self, $sql) = @_;
   my $dbh = DBI->connect($self->dsn);
+  my $parser = $self->can("_parse_@{[$self->url->canonical_engine]}") || sub { $_[1] };
   local $dbh->{sqlite_allow_multiple_statements} = 1 if $self->url->canonical_engine eq 'sqlite';
-  $dbh->do($sql);
+  $dbh->do($_) for $self->$parser($sql);
   $self;
 }
 
@@ -516,6 +517,59 @@ sub _drop_from_double_forked_child {
   sleep KILL_SLEEP_INTERVAL while kill 0, $ppid;
   $self->_cleanup;
   exit 0;
+}
+
+sub _parse_mysql {
+  my ($self, $sql) = @_;
+  my ($new, $last, $delimiter) = (1, '', ';');
+  my @commands;
+
+  while (length($sql) > 0) {
+    my $token;
+
+    if ($sql =~ /^$delimiter/x) {
+      ($new, $token) = (1, $delimiter);
+    }
+    elsif ($sql =~ /^delimiter\s+(\S+)\s*(?:\n|\z)/ip) {
+      ($new, $token, $delimiter) = (1, ${^MATCH}, $1);
+    }
+    elsif (
+      $sql =~ /^(\s+)/s    # whitespace
+      or $sql =~ /^(\w+)/
+      )
+    {                      # general name
+      $token = $1;
+    }
+    elsif (
+      $sql =~ /^--.*(?:\n|\z)/p                                # double-dash comment
+      or $sql =~ /^\#.*(?:\n|\z)/p                             # hash comment
+      or $sql =~ /^\/\*(?:[^\*]|\*[^\/])*(?:\*\/|\*\z|\z)/p    # C-style comment
+      or $sql =~ /^'(?:[^'\\]*|\\(?:.|\n)|'')*(?:'|\z)/p       # single-quoted literal text
+      or $sql =~ /^"(?:[^"\\]*|\\(?:.|\n)|"")*(?:"|\z)/p       # double-quoted literal text
+      or $sql =~ /^`(?:[^`]*|``)*(?:`|\z)/p
+      )
+    {                                                          # schema-quoted literal text
+      $token = ${^MATCH};
+    }
+    else {
+      $token = substr($sql, 0, 1);
+    }
+
+    # chew token
+    substr $sql, 0, length($token), '';
+
+    if ($new) {
+      push @commands, $last if $last !~ /^\s*$/s;
+      ($new, $last) = (0, '');
+    }
+    else {
+      $last .= $token;
+    }
+  }
+
+  push @commands, $last if $last !~ /^\s*$/s;
+
+  return @commands;
 }
 
 sub _schema_dsn {

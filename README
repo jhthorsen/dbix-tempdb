@@ -2,7 +2,7 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.07
+    0.08
 
 SYNOPSIS
       use Test::More;
@@ -96,7 +96,7 @@ METHODS
       $self = DBIx::TempDB->new($url, %args);
       $self = DBIx::TempDB->new("mysql://127.0.0.1");
       $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
-      $self = DBIx::TempDB->new("sqlite://");
+      $self = DBIx::TempDB->new("sqlite:");
 
     Creates a new object after checking the $url is valid. %args can be:
 
@@ -104,6 +104,32 @@ METHODS
 
         "create_database" will be called automatically, unless "auto_create"
         is set to a false value.
+
+    *   create_database_command
+
+        Can be set to a custom create database command in the database. The
+        default is "create database %d", where %d will be replaced by the
+        generated database name.
+
+        For even more control, you can set this to a code ref which will be
+        called like this:
+
+          $self->$cb($database_name);
+
+        The default is subject to change.
+
+    *   drop_database_command
+
+        Can be set to a custom drop database command in the database. The
+        default is "drop database %d", where %d will be replaced by the
+        generated database name.
+
+        For even more control, you can set this to a code ref which will be
+        called like this:
+
+          $self->$cb($database_name);
+
+        The default is subject to change.
 
     *   drop_from_child
 

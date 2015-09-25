@@ -16,8 +16,11 @@ DBIx::TempDB - Create a temporary database
   use DBIx::TempDB;
   use DBI;
 
+  # provide credentials with environment variables
+  plan skip_all => 'TEST_PG_DSN=postgresql://postgres@localhost' unless $ENV{TEST_PG_DSN};
+
   # create a temp database
-  my $tmpdb = DBIx::TempDB->new("postgresql://postgres@localhost");
+  my $tmpdb = DBIx::TempDB->new($ENV{TEST_PG_DSN});
 
   # print complete url to db server with database name
   diag $tmpdb->url;

@@ -2,15 +2,18 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.08
+    0.09
 
 SYNOPSIS
       use Test::More;
       use DBIx::TempDB;
       use DBI;
 
+      # provide credentials with environment variables
+      plan skip_all => 'TEST_PG_DSN=postgresql://postgres@localhost' unless $ENV{TEST_PG_DSN};
+
       # create a temp database
-      my $tmpdb = DBIx::TempDB->new("postgresql://postgres@localhost");
+      my $tmpdb = DBIx::TempDB->new($ENV{TEST_PG_DSN});
 
       # print complete url to db server with database name
       diag $tmpdb->url;
@@ -41,6 +44,14 @@ DESCRIPTION
 
     This module is currently EXPERIMENTAL. That means that if any major
     design flaws have been made, they will be fixed without warning.
+
+CAVEAT
+    Creating a database is easy, but making sure it gets clean up when your
+    process exit is a totally different ball game. This means that
+    DBIx::TempDB might fill up your server with random databases, unless you
+    choose the right "drop strategy". Have a look at the "drop_from_child"
+    parameter you can give to "new" and test the different values and select
+    the one that works for you.
 
 ENVIRONMENT VARIABLES
   DBIX_TEMP_DB_KEEP_DATABASE

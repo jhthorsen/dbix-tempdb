@@ -1,6 +1,6 @@
 Revision history for perl distribution DBIx-TempDB
 
-0.09 Not Released
+0.09 2015-10-07T16:59:12+0200
  - Will run cleanup from child on INT, QUIT and TERM
 
 0.08 2015-09-22T14:19:21+0200

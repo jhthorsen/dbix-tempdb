@@ -1,5 +1,8 @@
 Revision history for perl distribution DBIx-TempDB
 
+0.09 Not Released
+ - Will run cleanup from child on INT, QUIT and TERM
+
 0.08 2015-09-22T14:19:21+0200
  - Fix running multiple commands in MySQL using execute()
    The parser code is taken from Mojo::mysql, written by Svetoslav Naydenov

@@ -98,10 +98,8 @@ use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20
 use constant MAX_OPEN_FDS => eval { use POSIX qw( sysconf _SC_OPEN_MAX ); sysconf(_SC_OPEN_MAX) } || 1024;
 
 our $VERSION = '0.08';
-
 our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql');
-
-my $START_DB_INDEX = 0;
+my $N = 0;
 
 =head1 METHODS
 
@@ -125,7 +123,7 @@ sub create_database {
 
   local $@;
   while (++$guard < MAX_NUMBER_OF_TRIES) {
-    $name = $self->_generate_database_name($START_DB_INDEX + $guard);
+    $name = $self->_generate_database_name($N + $guard);
     eval { $self->_create_database($name) } or next;
     $self->{database_name} = $name;
     warn "[TempDB:$$] Created temp database $name\n" if DEBUG and !$ENV{DBIX_TEMP_DB_KEEP_DATABASE};
@@ -136,7 +134,7 @@ sub create_database {
     $self->{created}++;
     $self->{url}->dbname($name);
     $ENV{DBIX_TEMP_DB_URL} = $self->{url}->uri->as_string;
-    $START_DB_INDEX++;
+    $N++;
     return $self;
   }
 
@@ -487,12 +485,16 @@ sub _drop_from_child {
   return $self->{drop_pid} = $pid if $pid;
 
   # child
+  $DB::CreateTTY = 0;    # prevent debugger from creating terminals
+  $SIG{$_} = sub { $self->_cleanup; exit; }
+    for qw( INT QUIT TERM );
+
   for (0 .. MAX_OPEN_FDS - 1) {
     next if fileno($READ) == $_;
+    next if DEBUG and fileno(STDERR) == $_;
     POSIX::close($_);
   }
 
-  $DB::CreateTTY = 0;    # prevent debugger from creating terminals
   warn "[TempDB:$$] Waiting for $ppid to end\n" if DEBUG;
   1 while <$READ>;
   $self->_cleanup;

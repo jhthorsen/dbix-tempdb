@@ -2,7 +2,7 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.09
+    0.10
 
 SYNOPSIS
       use Test::More;
@@ -89,9 +89,9 @@ METHODS
     class method, with a URI::db or URL string as input.
 
   execute
-      $self = $self->execute($sql);
+      $self = $self->execute(@sql);
 
-    This method will execute the given $sql statements in the temporary SQL
+    This method will execute a list of @sql statements in the temporary SQL
     server.
 
   execute_file

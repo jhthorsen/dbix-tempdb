@@ -1,6 +1,6 @@
 Revision history for perl distribution DBIx-TempDB
 
-0.10 Not Released
+0.10 2015-11-04T19:06:29+0100
  - Fix parsing "SET foreign_key_checks=0" MySQL statement
 
 0.09 2015-10-07T16:59:12+0200

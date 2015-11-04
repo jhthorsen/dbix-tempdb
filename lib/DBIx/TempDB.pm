@@ -173,19 +173,19 @@ sub dsn {
 
 =head2 execute
 
-  $self = $self->execute($sql);
+  $self = $self->execute(@sql);
 
-This method will execute the given C<$sql> statements in the temporary
+This method will execute a list of C<@sql> statements in the temporary
 SQL server.
 
 =cut
 
 sub execute {
-  my ($self, $sql) = @_;
-  my $dbh = DBI->connect($self->dsn);
+  my $self   = shift;
+  my $dbh    = DBI->connect($self->dsn);
   my $parser = $self->can("_parse_@{[$self->url->canonical_engine]}") || sub { $_[1] };
   local $dbh->{sqlite_allow_multiple_statements} = 1 if $self->url->canonical_engine eq 'sqlite';
-  $dbh->do($_) for $self->$parser($sql);
+  $dbh->do($_) for map { $self->$parser($_) } @_;
   $self;
 }
 
@@ -535,7 +535,7 @@ sub _drop_from_double_forked_child {
 
 sub _parse_mysql {
   my ($self, $sql) = @_;
-  my ($new, $last, $delimiter) = (1, '', ';');
+  my ($new, $last, $delimiter) = (0, '', ';');
   my @commands;
 
   while (length($sql) > 0) {
@@ -582,8 +582,7 @@ sub _parse_mysql {
   }
 
   push @commands, $last if $last !~ /^\s*$/s;
-
-  return @commands;
+  return map { s/^\s+//; $_ } @commands;
 }
 
 sub _schema_dsn {

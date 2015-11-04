@@ -13,23 +13,26 @@ is_deeply(
 
 SET foreign_key_checks=0;
 
-create table if not exists migration_test_one (
+  drop table if exists y;
+--
+-- Table: y
+--
+create table y (
   foo varchar(255)
 );
 
-  drop table if exists migration_test_one;
 --    some
 -- comment
 delimiter //
-create table if not exists migration_test_two (bar varchar(255))//
+create table if not exists y (bar varchar(255))//
 set foreign_key_checks=1//
 HERE
   [
     "SET foreign_key_checks=0",
-    "create table if not exists migration_test_one (\n  foo varchar(255)\n)",
-    "drop table if exists migration_test_one",
+    "drop table if exists y",
+    "--\n-- Table: y\n--\ncreate table y (\n  foo varchar(255)\n)",
     "--    some\n-- comment\n",
-    "create table if not exists migration_test_two (bar varchar(255))",
+    "create table if not exists y (bar varchar(255))",
     "set foreign_key_checks=1",
   ],
   'multiple statements'

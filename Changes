@@ -1,5 +1,8 @@
 Revision history for perl distribution DBIx-TempDB
 
+0.11 Not Released
+ - Fix execute() to only pass one statement to $dbh->do()
+
 0.10 2015-11-04T19:06:29+0100
  - Fix parsing "SET foreign_key_checks=0" MySQL statement
 

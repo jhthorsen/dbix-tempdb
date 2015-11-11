@@ -185,7 +185,7 @@ sub execute {
   my $dbh    = DBI->connect($self->dsn);
   my $parser = $self->can("_parse_@{[$self->url->canonical_engine]}") || sub { $_[1] };
   local $dbh->{sqlite_allow_multiple_statements} = 1 if $self->url->canonical_engine eq 'sqlite';
-  $dbh->do($self->$parser($_)) for @_;
+  $dbh->do($_) for map { $self->$parser($_) } @_;
   $self;
 }
 

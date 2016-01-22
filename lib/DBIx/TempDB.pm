@@ -388,7 +388,7 @@ sub _dsn_for_pg {
 
   $url = URI::db->new($url);
   $url->dbname($database_name);
-  $url->query_param_delete($_) for $url->query_param;
+  $url->query(undef);
   if (my $service = delete $opt{service}) { $url->query_param(service => $service) }
   $dsn = $url->dbi_dsn;
   @userinfo = ($url->user, $url->password);
@@ -408,7 +408,7 @@ sub _dsn_for_mysql {
 
   $url = URI::db->new($url);
   $url->dbname($database_name);
-  $url->query_param_delete($_) for $url->query_param;
+  $url->query(undef);
   $dsn = $url->dbi_dsn;
   @userinfo = ($url->user, $url->password);
 
@@ -427,7 +427,7 @@ sub _dsn_for_sqlite {
 
   $url = URI::db->new($url);
   $url->dbname($database_name);
-  $url->query_param_delete($_) for $url->query_param;
+  $url->query(undef);
   my $dsn = $url->dbi_dsn;
 
   $opt{AutoCommit}          //= 1;

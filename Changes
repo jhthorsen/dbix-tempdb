@@ -1,5 +1,8 @@
 Revision history for perl distribution DBIx-TempDB
 
+0.12 Not Released
+ - Change drop_from_child=1 is now default #8
+
 0.11 2015-11-11T13:16:04+0100
  - Fix execute() to only pass one statement to $dbh->do()
 

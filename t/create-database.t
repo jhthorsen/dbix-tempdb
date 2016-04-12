@@ -8,6 +8,7 @@ my $tmpdb = DBIx::TempDB->new(
   'postgresql://dummy@127.42',
   create_database_command => sub { (my $tmpdb, $create_database) = @_ },
   drop_database_command   => sub { (my $tmpdb, $drop_database)   = @_ },
+  drop_from_child         => 0,
   template                => 'tmp_%X',
 );
 

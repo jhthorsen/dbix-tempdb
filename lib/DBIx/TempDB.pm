@@ -263,11 +263,9 @@ Setting "drop_from_child" to a true value will create a child process which
 will remove the temporary database, when the main process ends. There are two
 possible values:
 
-C<drop_from_child=1> will create a child process which monitor the
-L<DBIx::TempDB> object with a pipe. This will then DROP the temp database if
-the object goes out of scope or if the process ends.
-
-TODO: C<drop_from_child=1> might become the default.
+C<drop_from_child=1> (the default) will create a child process which monitor
+the L<DBIx::TempDB> object with a pipe. This will then DROP the temp database
+if the object goes out of scope or if the process ends.
 
 C<drop_from_child=2> will create a child process detached from the parent,
 which monitor the parent with C<kill(0, $parent)>.
@@ -308,9 +306,9 @@ sub new {
 
   $self->{create_database_command} ||= 'create database %d';
   $self->{drop_database_command}   ||= 'drop database %d';
-  $self->{drop_from_child}         ||= 0;
-  $self->{schema_database}         ||= $SCHEMA_DATABASE{$url->canonical_engine};
-  $self->{template}                ||= 'tmp_%U_%X_%H%i';
+  $self->{drop_from_child} //= 1;
+  $self->{schema_database} ||= $SCHEMA_DATABASE{$url->canonical_engine};
+  $self->{template} ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
   $self->{drop_from_child} = 0 if $ENV{DBIX_TEMP_DB_KEEP_DATABASE};

@@ -16,5 +16,5 @@ WriteMakefile(
   },
   BUILD_REQUIRES => {'Test::More' => '0.88'},
   PREREQ_PM      => {'DBI'        => '1.60', 'URI::QueryParam' => '1.69', 'URI::db' => '0.15', 'perl' => '5.010001'},
-  test           => {TESTS        => 't/*.t'},
+  test => {TESTS => (-e 'META.yml' ? 't/*.t' : 't/*.t xt/*.t')},
 );

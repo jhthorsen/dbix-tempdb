@@ -3,6 +3,7 @@ use Test::More;
 use DBIx::TempDB;
 
 plan skip_all => 'cpanm DBD::SQLite' unless eval 'require DBD::SQLite;1';
+plan skip_all => 'Need nix OS' if $^O =~ /win32/i;
 
 my $tmpdb = DBIx::TempDB->new('sqlite:');
 my $dbh   = DBI->connect($tmpdb->dsn);

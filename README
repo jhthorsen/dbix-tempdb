@@ -2,7 +2,7 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.12
+    0.13
 
 SYNOPSIS
       use Test::More;

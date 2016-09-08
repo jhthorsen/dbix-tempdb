@@ -1,5 +1,8 @@
 Revision history for perl distribution DBIx-TempDB
 
+0.13 2016-09-08T20:10:34+0200
+ - Skip tests on Windows
+
 0.12 2016-04-17T21:33:34+0200
  - Change drop_from_child=1 is now default #8
 

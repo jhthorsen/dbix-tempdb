@@ -17,7 +17,7 @@ use constant KILL_SLEEP_INTERVAL => $ENV{DBIX_TEMP_DB_KILL_SLEEP_INTERVAL} || 2;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
 use constant MAX_OPEN_FDS => eval { use POSIX qw(sysconf _SC_OPEN_MAX); sysconf(_SC_OPEN_MAX) } || 1024;
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql');
 my $N = 0;
 
@@ -386,7 +386,7 @@ DBIx::TempDB - Create a temporary database
 
 =head1 VERSION
 
-0.13
+0.14
 
 =head1 SYNOPSIS
 
@@ -427,9 +427,6 @@ L<DBD::Pg>, L<DBD::mysql> and/or L<DBD::SQLite> modules.
 
 Please create an L<issue|https://github.com/jhthorsen/dbix-tempdb/issues>
 or pull request for more backend support.
-
-This module is currently EXPERIMENTAL. That means that if any major design
-flaws have been made, they will be fixed without warning.
 
 =head1 CAVEAT
 

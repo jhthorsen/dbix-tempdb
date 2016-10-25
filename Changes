@@ -1,5 +1,8 @@
 Revision history for perl distribution DBIx-TempDB
 
+0.14 2016-10-25T22:48:20+0200
+ - Removed EXPERIMENTAL notice
+
 0.13 2016-09-08T20:10:34+0200
  - Skip tests on Windows
 

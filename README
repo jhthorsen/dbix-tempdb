@@ -2,7 +2,7 @@ NAME
     DBIx::TempDB - Create a temporary database
 
 VERSION
-    0.13
+    0.14
 
 SYNOPSIS
       use Test::More;
@@ -41,9 +41,6 @@ DESCRIPTION
 
     Please create an issue <https://github.com/jhthorsen/dbix-tempdb/issues>
     or pull request for more backend support.
-
-    This module is currently EXPERIMENTAL. That means that if any major
-    design flaws have been made, they will be fixed without warning.
 
 CAVEAT
     Creating a database is easy, but making sure it gets clean up when your

@@ -1,84 +1,4 @@
 package DBIx::TempDB;
-
-=encoding UTF-8
-
-=head1 NAME
-
-DBIx::TempDB - Create a temporary database
-
-=head1 VERSION
-
-0.13
-
-=head1 SYNOPSIS
-
-  use Test::More;
-  use DBIx::TempDB;
-  use DBI;
-
-  # provide credentials with environment variables
-  plan skip_all => 'TEST_PG_DSN=postgresql://postgres@localhost' unless $ENV{TEST_PG_DSN};
-
-  # create a temp database
-  my $tmpdb = DBIx::TempDB->new($ENV{TEST_PG_DSN});
-
-  # print complete url to db server with database name
-  diag $tmpdb->url;
-
-  # useful for reading in fixtures
-  $tmpdb->execute("create table users (name text)");
-  $tmpdb->execute_file("path/to/file.sql");
-
-  # connect to the temp database
-  my $db = DBI->connect($tmpdb->dsn);
-
-  # run tests...
-
-  done_testing;
-  # database is cleaned up when test exit
-
-=head1 DESCRIPTION
-
-L<DBIx::TempDB> is a module which allows you to create a temporary database,
-which only lives as long as your process is alive. This can be very
-convenient when you want to run tests in parallel, without messing up the
-state between tests.
-
-This module currently support PostgreSQL, MySQL and SQLite by installing the optional
-L<DBD::Pg>, L<DBD::mysql> and/or L<DBD::SQLite> modules.
-
-Please create an L<issue|https://github.com/jhthorsen/dbix-tempdb/issues>
-or pull request for more backend support.
-
-This module is currently EXPERIMENTAL. That means that if any major design
-flaws have been made, they will be fixed without warning.
-
-=head1 CAVEAT
-
-Creating a database is easy, but making sure it gets clean up when your
-process exit is a totally different ball game. This means that
-L<DBIx::TempDB> might fill up your server with random databases, unless
-you choose the right "drop strategy". Have a look at the L</drop_from_child>
-parameter you can give to L</new> and test the different values and select
-the one that works for you.
-
-=head1 ENVIRONMENT VARIABLES
-
-=head2 DBIX_TEMP_DB_KEEP_DATABASE
-
-Setting this variable will disable the core feature in this module:
-A unique database will be created, but it will not get dropped/deleted.
-
-=head2 DBIX_TEMP_DB_URL
-
-This variable is set by L</create_database> and contains the complete
-URL pointing to the temporary database.
-
-Note that calling L</create_database> on different instances of
-L<DBIx::TempDB> will overwrite C<DBIX_TEMP_DB_URL>.
-
-=cut
-
 use strict;
 use warnings;
 use Carp 'confess';
@@ -95,26 +15,11 @@ use constant CWD => eval { File::Basename::dirname(Cwd::abs_path($0)) };
 use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG}               || 0;
 use constant KILL_SLEEP_INTERVAL => $ENV{DBIX_TEMP_DB_KILL_SLEEP_INTERVAL} || 2;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
-use constant MAX_OPEN_FDS => eval { use POSIX qw( sysconf _SC_OPEN_MAX ); sysconf(_SC_OPEN_MAX) } || 1024;
+use constant MAX_OPEN_FDS => eval { use POSIX qw(sysconf _SC_OPEN_MAX); sysconf(_SC_OPEN_MAX) } || 1024;
 
 our $VERSION = '0.13';
 our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql');
 my $N = 0;
-
-=head1 METHODS
-
-=head2 create_database
-
-  $self = $self->create_database;
-
-This method will create a temp database for the current process. Calling this
-method multiple times will simply do nothing. This method is normally
-automatically called by L</new>.
-
-The database name generate is defined by the L</template> parameter passed to
-L</new>, but normalization will be done to make it work for the given database.
-
-=cut
 
 sub create_database {
   return $_[0] if $_[0]->{created};
@@ -141,20 +46,6 @@ sub create_database {
   confess "Could not create unique database: '$name'. $@";
 }
 
-=head2 dsn
-
-  ($dsn, $user, $pass, $attrs) = $self->dsn;
-  ($dsn, $user, $pass, $attrs) = DBIx::TempDB->dsn($url);
-
-Will parse L</url> or C<$url>, and return a list of arguments suitable for
-L<DBI/connect>.
-
-Note that this method cannot be called as an object method before
-L</create_database> is called. You can on the other hand call it as a class
-method, with a L<URI::db> or URL string as input.
-
-=cut
-
 sub dsn {
   my ($self, $url) = @_;
 
@@ -171,15 +62,6 @@ sub dsn {
   }
 }
 
-=head2 execute
-
-  $self = $self->execute(@sql);
-
-This method will execute a list of C<@sql> statements in the temporary
-SQL server.
-
-=cut
-
 sub execute {
   my $self   = shift;
   my $dbh    = DBI->connect($self->dsn);
@@ -188,18 +70,6 @@ sub execute {
   $dbh->do($_) for map { $self->$parser($_) } @_;
   $self;
 }
-
-=head2 execute_file
-
-  $self = $self->execute_file("relative/to/executable.sql");
-  $self = $self->execute_file("/absolute/path/stmt.sql");
-
-This method will read the contents of a file and execute the SQL statements
-in the temporary server.
-
-This method is a thin wrapper around L</execute>.
-
-=cut
 
 sub execute_file {
   my ($self, $path) = @_;
@@ -216,80 +86,6 @@ sub execute_file {
   warn "[TempDB:$$] Execute $path\n" if DEBUG;
   $self->execute($sql);
 }
-
-=head2 new
-
-  $self = DBIx::TempDB->new($url, %args);
-  $self = DBIx::TempDB->new("mysql://127.0.0.1");
-  $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
-  $self = DBIx::TempDB->new("sqlite:");
-
-Creates a new object after checking the C<$url> is valid. C<%args> can be:
-
-=over 4
-
-=item * auto_create
-
-L</create_database> will be called automatically, unless C<auto_create> is
-set to a false value.
-
-=item * create_database_command
-
-Can be set to a custom create database command in the database. The default is
-"create database %d", where %d will be replaced by the generated database name.
-
-For even more control, you can set this to a code ref which will be called like
-this:
-
-  $self->$cb($database_name);
-
-The default is subject to change.
-
-=item * drop_database_command
-
-Can be set to a custom drop database command in the database. The default is
-"drop database %d", where %d will be replaced by the generated database name.
-
-For even more control, you can set this to a code ref which will be called like
-this:
-
-  $self->$cb($database_name);
-
-The default is subject to change.
-
-=item * drop_from_child
-
-Setting "drop_from_child" to a true value will create a child process which
-will remove the temporary database, when the main process ends. There are two
-possible values:
-
-C<drop_from_child=1> (the default) will create a child process which monitor
-the L<DBIx::TempDB> object with a pipe. This will then DROP the temp database
-if the object goes out of scope or if the process ends.
-
-C<drop_from_child=2> will create a child process detached from the parent,
-which monitor the parent with C<kill(0, $parent)>.
-
-The double fork code is based on a paste contributed by
-L<Easy Connect AS|http://easyconnect.no>, Knut Arne Bjørndal.
-
-=item * template
-
-Customize the generated database name. Default template is "tmp_%U_%X_%H%i".
-Possible variables to expand are:
-
-  %i = The number of tries if tries are higher than 0. Example: "_3"
-  %H = Hostname
-  %P = Process ID ($$)
-  %T = Process start time ($^T)
-  %U = UID of current user
-  %X = Basename of executable
-
-The default is subject to change!
-
-=back
-
-=cut
 
 sub new {
   my $class = shift;
@@ -316,19 +112,6 @@ sub new {
   return $self->create_database if $self->{auto_create} // 1;
   return $self;
 }
-
-=head2 url
-
-  $url = $self->url;
-
-Returns the input URL as L<URI::db> compatible object. This URL will have
-the L<dbname|URI::db/dbname> part set to the database from L</create_database>,
-but not I<until> after L</create_database> is actually called.
-
-The URL returned can be passed directly to modules such as L<Mojo::Pg>
-and L<Mojo::mysql>.
-
-=cut
 
 sub url { shift->{url}->uri }
 
@@ -369,7 +152,7 @@ sub _create_database {
   }
   elsif ($self->url->canonical_engine eq 'sqlite') {
     require IO::File;
-    use Fcntl qw( O_CREAT O_EXCL O_RDWR );
+    use Fcntl qw(O_CREAT O_EXCL O_RDWR);
     IO::File->new->open($name, O_CREAT | O_EXCL | O_RDWR) or die "open $name O_CREAT|O_EXCL|O_RDWR: $!\n";
   }
   else {
@@ -485,7 +268,7 @@ sub _drop_from_child {
   # child
   $DB::CreateTTY = 0;    # prevent debugger from creating terminals
   $SIG{$_} = sub { $self->_cleanup; exit; }
-    for qw( INT QUIT TERM );
+    for qw(INT QUIT TERM);
 
   for (0 .. MAX_OPEN_FDS - 1) {
     next if fileno($READ) == $_;
@@ -593,6 +376,210 @@ sub _tempdir {
   shift->{tempdir} ||= File::Spec->tmpdir;
 }
 
+1;
+
+=encoding utf8
+
+=head1 NAME
+
+DBIx::TempDB - Create a temporary database
+
+=head1 VERSION
+
+0.13
+
+=head1 SYNOPSIS
+
+  use Test::More;
+  use DBIx::TempDB;
+  use DBI;
+
+  # provide credentials with environment variables
+  plan skip_all => 'TEST_PG_DSN=postgresql://postgres@localhost' unless $ENV{TEST_PG_DSN};
+
+  # create a temp database
+  my $tmpdb = DBIx::TempDB->new($ENV{TEST_PG_DSN});
+
+  # print complete url to db server with database name
+  diag $tmpdb->url;
+
+  # useful for reading in fixtures
+  $tmpdb->execute("create table users (name text)");
+  $tmpdb->execute_file("path/to/file.sql");
+
+  # connect to the temp database
+  my $db = DBI->connect($tmpdb->dsn);
+
+  # run tests...
+
+  done_testing;
+  # database is cleaned up when test exit
+
+=head1 DESCRIPTION
+
+L<DBIx::TempDB> is a module which allows you to create a temporary database,
+which only lives as long as your process is alive. This can be very
+convenient when you want to run tests in parallel, without messing up the
+state between tests.
+
+This module currently support PostgreSQL, MySQL and SQLite by installing the optional
+L<DBD::Pg>, L<DBD::mysql> and/or L<DBD::SQLite> modules.
+
+Please create an L<issue|https://github.com/jhthorsen/dbix-tempdb/issues>
+or pull request for more backend support.
+
+This module is currently EXPERIMENTAL. That means that if any major design
+flaws have been made, they will be fixed without warning.
+
+=head1 CAVEAT
+
+Creating a database is easy, but making sure it gets clean up when your
+process exit is a totally different ball game. This means that
+L<DBIx::TempDB> might fill up your server with random databases, unless
+you choose the right "drop strategy". Have a look at the L</drop_from_child>
+parameter you can give to L</new> and test the different values and select
+the one that works for you.
+
+=head1 ENVIRONMENT VARIABLES
+
+=head2 DBIX_TEMP_DB_KEEP_DATABASE
+
+Setting this variable will disable the core feature in this module:
+A unique database will be created, but it will not get dropped/deleted.
+
+=head2 DBIX_TEMP_DB_URL
+
+This variable is set by L</create_database> and contains the complete
+URL pointing to the temporary database.
+
+Note that calling L</create_database> on different instances of
+L<DBIx::TempDB> will overwrite C<DBIX_TEMP_DB_URL>.
+
+=head1 METHODS
+
+=head2 create_database
+
+  $self = $self->create_database;
+
+This method will create a temp database for the current process. Calling this
+method multiple times will simply do nothing. This method is normally
+automatically called by L</new>.
+
+The database name generate is defined by the L</template> parameter passed to
+L</new>, but normalization will be done to make it work for the given database.
+
+=head2 dsn
+
+  ($dsn, $user, $pass, $attrs) = $self->dsn;
+  ($dsn, $user, $pass, $attrs) = DBIx::TempDB->dsn($url);
+
+Will parse L</url> or C<$url>, and return a list of arguments suitable for
+L<DBI/connect>.
+
+Note that this method cannot be called as an object method before
+L</create_database> is called. You can on the other hand call it as a class
+method, with a L<URI::db> or URL string as input.
+
+=head2 execute
+
+  $self = $self->execute(@sql);
+
+This method will execute a list of C<@sql> statements in the temporary
+SQL server.
+
+=head2 execute_file
+
+  $self = $self->execute_file("relative/to/executable.sql");
+  $self = $self->execute_file("/absolute/path/stmt.sql");
+
+This method will read the contents of a file and execute the SQL statements
+in the temporary server.
+
+This method is a thin wrapper around L</execute>.
+
+=head2 new
+
+  $self = DBIx::TempDB->new($url, %args);
+  $self = DBIx::TempDB->new("mysql://127.0.0.1");
+  $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
+  $self = DBIx::TempDB->new("sqlite:");
+
+Creates a new object after checking the C<$url> is valid. C<%args> can be:
+
+=over 4
+
+=item * auto_create
+
+L</create_database> will be called automatically, unless C<auto_create> is
+set to a false value.
+
+=item * create_database_command
+
+Can be set to a custom create database command in the database. The default is
+"create database %d", where %d will be replaced by the generated database name.
+
+For even more control, you can set this to a code ref which will be called like
+this:
+
+  $self->$cb($database_name);
+
+The default is subject to change.
+
+=item * drop_database_command
+
+Can be set to a custom drop database command in the database. The default is
+"drop database %d", where %d will be replaced by the generated database name.
+
+For even more control, you can set this to a code ref which will be called like
+this:
+
+  $self->$cb($database_name);
+
+The default is subject to change.
+
+=item * drop_from_child
+
+Setting "drop_from_child" to a true value will create a child process which
+will remove the temporary database, when the main process ends. There are two
+possible values:
+
+C<drop_from_child=1> (the default) will create a child process which monitor
+the L<DBIx::TempDB> object with a pipe. This will then DROP the temp database
+if the object goes out of scope or if the process ends.
+
+C<drop_from_child=2> will create a child process detached from the parent,
+which monitor the parent with C<kill(0, $parent)>.
+
+The double fork code is based on a paste contributed by
+L<Easy Connect AS|http://easyconnect.no>, Knut Arne Bjørndal.
+
+=item * template
+
+Customize the generated database name. Default template is "tmp_%U_%X_%H%i".
+Possible variables to expand are:
+
+  %i = The number of tries if tries are higher than 0. Example: "_3"
+  %H = Hostname
+  %P = Process ID ($$)
+  %T = Process start time ($^T)
+  %U = UID of current user
+  %X = Basename of executable
+
+The default is subject to change!
+
+=back
+
+=head2 url
+
+  $url = $self->url;
+
+Returns the input URL as L<URI::db> compatible object. This URL will have
+the L<dbname|URI::db/dbname> part set to the database from L</create_database>,
+but not I<until> after L</create_database> is actually called.
+
+The URL returned can be passed directly to modules such as L<Mojo::Pg>
+and L<Mojo::mysql>.
+
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2015, Jan Henning Thorsen
@@ -605,5 +592,3 @@ the terms of the Artistic License version 2.0.
 Jan Henning Thorsen - C<jhthorsen@cpan.org>
 
 =cut
-
-1;

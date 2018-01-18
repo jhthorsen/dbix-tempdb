@@ -238,7 +238,7 @@ sub _generate_database_name {
          $self->{template} =~ s!\%T!!g
       or $self->{template} =~ s!\%H!!g
       or $self->{template} =~ s!\%X!!g
-      or confess "Uable to create shorter database anme.";
+      or confess "Uable to create shorter database name.";
     warn "!!! Database name '$name' is too long! Forcing a shorter template: $self->{template}"
       if !$ENV{HARNESS_ACTIVE} or $ENV{HARNESS_VERBOSE};
     return $self->_generate_database_name($n);

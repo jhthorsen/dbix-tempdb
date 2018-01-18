@@ -246,6 +246,7 @@ sub _generate_database_name {
 
   $name =~ s!^/+!!;
   $name =~ s!\W!_!g;
+  $name = lc $name;
 
   return $name if $self->url->canonical_engine ne 'sqlite';
   return File::Spec->catfile($self->_tempdir, "$name.sqlite");

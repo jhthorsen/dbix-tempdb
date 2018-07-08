@@ -11,13 +11,13 @@ use Sys::Hostname ();
 use URI::db;
 use URI::QueryParam;
 
-use constant CWD => eval { File::Basename::dirname(Cwd::abs_path($0)) };
-use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG}               || 0;
+use constant CWD                 => eval { File::Basename::dirname(Cwd::abs_path($0)) };
+use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG} || 0;
 use constant KILL_SLEEP_INTERVAL => $ENV{DBIX_TEMP_DB_KILL_SLEEP_INTERVAL} || 2;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
-use constant MAX_OPEN_FDS => eval { use POSIX qw(sysconf _SC_OPEN_MAX); sysconf(_SC_OPEN_MAX) } || 1024;
+use constant MAX_OPEN_FDS        => eval { use POSIX qw(sysconf _SC_OPEN_MAX); sysconf(_SC_OPEN_MAX) } || 1024;
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql');
 my $N = 0;
 
@@ -387,7 +387,7 @@ DBIx::TempDB - Create a temporary database
 
 =head1 VERSION
 
-0.14
+0.15
 
 =head1 SYNOPSIS
 

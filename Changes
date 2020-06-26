@@ -1,5 +1,8 @@
 Revision history for perl distribution DBIx-TempDB
 
+0.16 Not Released
+ - Can clean up temp databases manually
+
 0.15 2018-07-08T18:57:16+0800
  - Guarantee that database names are lower case #9
    Contributor: Christopher Eveland <chris@eyeson.ai>

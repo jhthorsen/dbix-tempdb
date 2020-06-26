@@ -17,8 +17,8 @@ use constant KILL_SLEEP_INTERVAL => $ENV{DBIX_TEMP_DB_KILL_SLEEP_INTERVAL} || 2;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
 use constant MAX_OPEN_FDS        => eval { use POSIX qw(sysconf _SC_OPEN_MAX); sysconf(_SC_OPEN_MAX) } || 1024;
 
-our $VERSION = '0.15';
-our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql');
+our $VERSION         = '0.15';
+our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql', sqlite => '');
 my $N = 0;
 
 sub create_database {
@@ -46,6 +46,38 @@ sub create_database {
   confess "Could not create unique database: '$name'. $@";
 }
 
+sub dbh {
+  my $self = shift;
+  my @dsn  = $self->dsn;
+  die 'No such database' if $self->url->canonical_engine eq 'sqlite' and !-e $self->{database_name};
+  return $self->{dbh} = DBI->connect(@dsn);
+}
+
+sub drop_databases {
+  my ($self, $params) = @_;
+
+  my $self_db_name = $self->{database_name} || '';
+  my $delete_self  = $params->{self}        || '';
+  $self->dbh->disconnect if $delete_self and $self->{dbh} and $self->{dbh}->ping;
+
+  # Drop a single database by name
+  return $self->_drop_database($params->{name}) if $params->{name};
+  return $self->_drop_database($self_db_name)   if $delete_self eq 'only';
+
+  # Drop sibling (and curren) databases
+  my $max = $N > MAX_NUMBER_OF_TRIES ? $N : MAX_NUMBER_OF_TRIES;
+  my @err;
+  for my $n (1 .. $max) {
+    my $name = $self->_generate_database_name($n);
+    next unless $delete_self eq 'include' or ($self_db_name and $self_db_name ne $name);
+    push @err, $@ unless eval { $self->_drop_database($name); 1 };
+    warn "[TempDB:$$] Dropped temp database $name: $@\n" if DEBUG and !$@;
+  }
+
+  die $err[0] if @err == $max;
+  return $self;
+}
+
 sub dsn {
   my ($self, $url) = @_;
 
@@ -64,7 +96,7 @@ sub dsn {
 
 sub execute {
   my $self   = shift;
-  my $dbh    = DBI->connect($self->dsn);
+  my $dbh    = $self->dbh;
   my $parser = $self->can("_parse_@{[$self->url->canonical_engine]}") || sub { $_[1] };
   local $dbh->{sqlite_allow_multiple_statements} = 1 if $self->url->canonical_engine eq 'sqlite';
   $dbh->do($_) for map { $self->$parser($_) } @_;
@@ -89,11 +121,11 @@ sub execute_file {
 
 sub new {
   my $class = shift;
-  my $url = URI::db->new(shift || '');
+  my $url   = URI::db->new(shift || '');
   unless ($url->has_recognized_engine) {
     confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url";
   }
-  my $self = bless {@_, url => $url}, $class;
+  my $self    = bless {@_, url => $url}, $class;
   my $dsn_for = sprintf '_dsn_for_%s', $url->canonical_engine || '';
 
   unless ($self->can($dsn_for)) {
@@ -104,7 +136,7 @@ sub new {
   $self->{drop_database_command}   ||= 'drop database %d';
   $self->{drop_from_child} //= 1;
   $self->{schema_database} ||= $SCHEMA_DATABASE{$url->canonical_engine};
-  $self->{template} ||= 'tmp_%U_%X_%H%i';
+  $self->{template}        ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
   $self->{drop_from_child} = 0 if $ENV{DBIX_TEMP_DB_KEEP_DATABASE};
@@ -125,23 +157,9 @@ sub DESTROY {
 
 sub _cleanup {
   my $self = shift;
-
-  eval {
-    if (ref $self->{drop_database_command} eq 'CODE') {
-      $self->{drop_database_command}->($self, $self->{database_name});
-    }
-    elsif ($self->url->canonical_engine eq 'sqlite') {
-      unlink $self->{database_name} or die $!;
-    }
-    else {
-      my $sql = $self->{drop_database_command};
-      $sql =~ s!\%d!$self->{database_name}!g;
-      DBI->connect($self->_schema_dsn)->do($sql);
-    }
-    1;
-  } or do {
-    die "[$$] Unable to drop $self->{database_name}: $@";
-  };
+  return unless $self->{database_name};
+  die "[TempDB:$$] Unable to drop $self->{database_name}: $@"
+    unless eval { $self->_drop_database($self->{database_name}); 1 };
 }
 
 sub _create_database {
@@ -162,6 +180,22 @@ sub _create_database {
   }
 }
 
+sub _drop_database {
+  my ($self, $name) = @_;
+
+  if (ref $self->{drop_database_command} eq 'CODE') {
+    $self->{drop_database_command}->($self, $name);
+  }
+  elsif ($self->url->canonical_engine eq 'sqlite') {
+    unlink $name or die $!;
+  }
+  else {
+    my $sql = $self->{drop_database_command};
+    $sql =~ s!\%d!$name!g;
+    DBI->connect($self->_schema_dsn)->do($sql);
+  }
+}
+
 sub _dsn_for_pg {
   my ($class, $url, $database_name) = @_;
   my %opt = %{$url->query_form_hash};
@@ -171,7 +205,7 @@ sub _dsn_for_pg {
   $url->dbname($database_name);
   $url->query(undef);
   if (my $service = delete $opt{service}) { $url->query_param(service => $service) }
-  $dsn = $url->dbi_dsn;
+  $dsn      = $url->dbi_dsn;
   @userinfo = ($url->user, $url->password);
 
   $opt{AutoCommit}          //= 1;
@@ -190,7 +224,7 @@ sub _dsn_for_mysql {
   $url = URI::db->new($url);
   $url->dbname($database_name);
   $url->query(undef);
-  $dsn = $url->dbi_dsn;
+  $dsn      = $url->dbi_dsn;
   @userinfo = ($url->user, $url->password);
 
   $opt{AutoCommit}          //= 1;
@@ -267,7 +301,7 @@ sub _drop_from_child {
   return $self->{drop_pid} = $pid if $pid;
 
   # child
-  $DB::CreateTTY = 0;    # prevent debugger from creating terminals
+  $DB::CreateTTY = 0;                         # prevent debugger from creating terminals
   $SIG{$_} = sub { $self->_cleanup; exit; }
     for qw(INT QUIT TERM);
 
@@ -330,14 +364,14 @@ sub _parse_mysql {
       ($new, $token, $delimiter) = (1, ${^MATCH}, $1);
     }
     elsif (
-      $sql =~ /^(\s+)/s    # whitespace
+      $sql =~ /^(\s+)/s     # whitespace
       or $sql =~ /^(\w+)/
       )
-    {                      # general name
+    {                       # general name
       $token = $1;
     }
     elsif (
-      $sql =~ /^--.*(?:\n|\z)/p                                # double-dash comment
+      $sql    =~ /^--.*(?:\n|\z)/p                             # double-dash comment
       or $sql =~ /^\#.*(?:\n|\z)/p                             # hash comment
       or $sql =~ /^\/\*(?:[^\*]|\*[^\/])*(?:\*\/|\*\z|\z)/p    # C-style comment
       or $sql =~ /^'(?:[^'\\]*|\\(?:.|\n)|'')*(?:'|\z)/p       # single-quoted literal text
@@ -465,6 +499,22 @@ automatically called by L</new>.
 
 The database name generate is defined by the L</template> parameter passed to
 L</new>, but normalization will be done to make it work for the given database.
+
+=head2 dbh
+
+  $dbh = $self->dbh;
+
+Will try to connect to the temp datbase and return a C<$dbh>.
+
+=head2 drop_databases
+
+  $self->drop_databases;
+  $self->drop_databases({self => "include"});
+  $self->drop_databases({self => "only"});
+  $self->drop_databases({name => "some_database_name"});
+
+Used to drop either sibling databases (default), sibling databases and the
+current database or a given database by name.
 
 =head2 dsn
 

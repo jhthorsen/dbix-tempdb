@@ -1,15 +1,17 @@
 package DBIx::TempDB;
 use strict;
 use warnings;
+
 use Carp 'confess';
 use Cwd ();
 use DBI;
+use DBIx::TempDB::Util qw(dsn_for parse_sql);
 use File::Basename ();
 use File::Spec;
-use IO::Handle    ();
+use IO::Handle ();
+use Scalar::Util 'blessed';
 use Sys::Hostname ();
 use URI::db;
-use URI::QueryParam;
 
 use constant CWD                 => eval { File::Basename::dirname(Cwd::abs_path($0)) };
 use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG} || 0;
@@ -81,25 +83,22 @@ sub drop_databases {
 sub dsn {
   my ($self, $url) = @_;
 
-  if (!ref $self and $url) {
-    $url = URI::db->new($url) unless ref $url and $url->isa('URI::_db');
-    confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url"
-      unless $url->has_recognized_engine;
-    $self->can(sprintf '_dsn_for_%s', $url->canonical_engine)->($self, $url, $url->dbname);
+  unless (blessed $self) {
+    Carp::carp("DBIx::TempDB->dsn(...) is deprecated. Use DBIx::TempDB::dsn_for() instead");
+    $url = URI::db->new($url) unless blessed $url;
+    return dsn_for($url, $url->dbname);
   }
-  else {
-    confess 'Cannot return DSN before create_database() is called.' unless $self->{database_name};
-    $self->can(sprintf '_dsn_for_%s', $self->url->canonical_engine)->($self, $self->url, $self->{database_name});
-  }
+
+  confess 'Cannot return DSN before create_database() is called.' unless $self->{database_name};
+  return dsn_for($self->{url}, $self->{database_name});
 }
 
 sub execute {
-  my $self   = shift;
-  my $dbh    = $self->dbh;
-  my $parser = $self->can("_parse_@{[$self->url->canonical_engine]}") || sub { $_[1] };
+  my $self = shift;
+  my $dbh  = $self->dbh;
   local $dbh->{sqlite_allow_multiple_statements} = 1 if $self->url->canonical_engine eq 'sqlite';
-  $dbh->do($_) for map { $self->$parser($_) } @_;
-  $self;
+  $dbh->do($_) for map { parse_sql($self->url, $_) } @_;
+  return $self;
 }
 
 sub execute_file {
@@ -115,21 +114,13 @@ sub execute_file {
   while ($ret = $SQL->sysread(my $buffer, 131072, 0)) { $sql .= $buffer }
   die qq{DBIx::TempDB can't read from file "$path": $!} unless defined $ret;
   warn "[TempDB:$$] Execute $path\n" if DEBUG;
-  $self->execute($sql);
+  return $self->execute($sql);
 }
 
 sub new {
   my $class = shift;
-
-  my $url = URI::db->new(shift || '');
-  confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url"
-    unless $url->has_recognized_engine;
-
-  my $self    = bless {@_, url => $url}, $class;
-  my $dsn_for = sprintf '_dsn_for_%s', $url->canonical_engine || '';
-
-  confess "Cannot generate temp database for '@{[$url->canonical_engine]}'. $class\::$dsn_for() is missing"
-    unless $self->can($dsn_for);
+  my $url   = URI::db->new(shift || '');
+  my $self  = bless {@_, url => $url}, $class;
 
   $self->{create_database_command} ||= 'create database %d';
   $self->{drop_database_command}   ||= 'drop database %d';
@@ -195,71 +186,13 @@ sub _drop_database {
   }
 }
 
-sub _dsn_for_pg {
-  my ($class, $url, $database_name) = @_;
-  my %opt = %{$url->query_form_hash};
-  my ($dsn, @userinfo);
-
-  $url = URI::db->new($url);
-  $url->dbname($database_name);
-  $url->query(undef);
-  if (my $service = delete $opt{service}) { $url->query_param(service => $service) }
-  $dsn      = $url->dbi_dsn;
-  @userinfo = ($url->user, $url->password);
-
-  $opt{AutoCommit}          //= 1;
-  $opt{AutoInactiveDestroy} //= 1;
-  $opt{PrintError}          //= 0;
-  $opt{RaiseError}          //= 1;
-
-  return $dsn, @userinfo[0, 1], \%opt;
-}
-
-sub _dsn_for_mysql {
-  my ($class, $url, $database_name) = @_;
-  my %opt = %{$url->query_form_hash};
-  my ($dsn, @userinfo);
-
-  $url = URI::db->new($url);
-  $url->dbname($database_name);
-  $url->query(undef);
-  $dsn      = $url->dbi_dsn;
-  @userinfo = ($url->user, $url->password);
-
-  $opt{AutoCommit}          //= 1;
-  $opt{AutoInactiveDestroy} //= 1;
-  $opt{PrintError}          //= 0;
-  $opt{RaiseError}          //= 1;
-  $opt{mysql_enable_utf8}   //= 1;
-
-  return $dsn, @userinfo[0, 1], \%opt;
-}
-
-sub _dsn_for_sqlite {
-  my ($class, $url, $database_name) = @_;
-  my %opt = %{$url->query_form_hash};
-
-  $url = URI::db->new($url);
-  $url->dbname($database_name);
-  $url->query(undef);
-  my $dsn = $url->dbi_dsn;
-
-  $opt{AutoCommit}          //= 1;
-  $opt{AutoInactiveDestroy} //= 1;
-  $opt{PrintError}          //= 0;
-  $opt{RaiseError}          //= 1;
-  $opt{sqlite_unicode}      //= 1;
-
-  return $dsn, "", "", \%opt;
-}
-
 sub _generate_database_name {
   my ($self, $n) = @_;
   my $name = $self->{template};
 
   $name =~ s/\%([iHPTUX])/{
       $1 eq 'i' ? ($n > 0 ? "_$n" : '')
-    : $1 eq 'H' ? $self->_hostname
+    : $1 eq 'H' ? Sys::Hostname::hostname()
     : $1 eq 'P' ? $$
     : $1 eq 'T' ? $^T
     : $1 eq 'U' ? $<
@@ -283,10 +216,6 @@ sub _generate_database_name {
 
   return $name if $self->url->canonical_engine ne 'sqlite';
   return File::Spec->catfile($self->_tempdir, "$name.sqlite");
-}
-
-sub _hostname {
-  shift->{hostname} ||= Sys::Hostname::hostname();
 }
 
 sub _drop_from_child {
@@ -346,58 +275,6 @@ sub _drop_from_double_forked_child {
   sleep KILL_SLEEP_INTERVAL while kill 0, $ppid;
   $self->_cleanup;
   exit 0;
-}
-
-sub _parse_mysql {
-  my ($self, $sql) = @_;
-  my ($new, $last, $delimiter) = (0, '', ';');
-  my @commands;
-
-  while (length($sql) > 0) {
-    my $token;
-
-    if ($sql =~ /^$delimiter/x) {
-      ($new, $token) = (1, $delimiter);
-    }
-    elsif ($sql =~ /^delimiter\s+(\S+)\s*(?:\n|\z)/ip) {
-      ($new, $token, $delimiter) = (1, ${^MATCH}, $1);
-    }
-    elsif (
-      $sql =~ /^(\s+)/s     # whitespace
-      or $sql =~ /^(\w+)/
-      )
-    {                       # general name
-      $token = $1;
-    }
-    elsif (
-      $sql    =~ /^--.*(?:\n|\z)/p                             # double-dash comment
-      or $sql =~ /^\#.*(?:\n|\z)/p                             # hash comment
-      or $sql =~ /^\/\*(?:[^\*]|\*[^\/])*(?:\*\/|\*\z|\z)/p    # C-style comment
-      or $sql =~ /^'(?:[^'\\]*|\\(?:.|\n)|'')*(?:'|\z)/p       # single-quoted literal text
-      or $sql =~ /^"(?:[^"\\]*|\\(?:.|\n)|"")*(?:"|\z)/p       # double-quoted literal text
-      or $sql =~ /^`(?:[^`]*|``)*(?:`|\z)/p
-      )
-    {                                                          # schema-quoted literal text
-      $token = ${^MATCH};
-    }
-    else {
-      $token = substr($sql, 0, 1);
-    }
-
-    # chew token
-    substr $sql, 0, length($token), '';
-
-    if ($new) {
-      push @commands, $last if $last !~ /^\s*$/s;
-      ($new, $last) = (0, '');
-    }
-    else {
-      $last .= $token;
-    }
-  }
-
-  push @commands, $last if $last !~ /^\s*$/s;
-  return map { s/^\s+//; $_ } @commands;
 }
 
 sub _schema_dsn {
@@ -518,14 +395,11 @@ current database or a given database by name.
 =head2 dsn
 
   ($dsn, $user, $pass, $attrs) = $tmpdb->dsn;
-  ($dsn, $user, $pass, $attrs) = DBIx::TempDB->dsn($url);
 
-Will parse L</url> or C<$url>, and return a list of arguments suitable for
-L<DBI/connect>.
+Will parse L</url> and return a list of arguments suitable for L<DBI/connect>.
 
 Note that this method cannot be called as an object method before
-L</create_database> is called. You can on the other hand call it as a class
-method, with a L<URI::db> or URL string as input.
+L</create_database> is called.
 
 =head2 execute
 

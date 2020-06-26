@@ -25,13 +25,4 @@ is_deeply(
   'dsn for tikes'
 );
 
-is_deeply(
-  [DBIx::TempDB->dsn('mysql://x:y@example.com:2345/aiaiai')],
-  [
-    'dbi:mysql:host=example.com;port=2345;database=aiaiai',
-    'x', 'y', {AutoCommit => 1, AutoInactiveDestroy => 1, PrintError => 0, RaiseError => 1, mysql_enable_utf8 => 1}
-  ],
-  'dsn for class'
-);
-
 done_testing;

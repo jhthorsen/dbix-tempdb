@@ -1,6 +1,7 @@
 Revision history for perl distribution DBIx-TempDB
 
 0.16 Not Released
+ - Add DBIx::TempDB::Util
  - Can clean up temp databases manually
 
 0.15 2018-07-08T18:57:16+0800

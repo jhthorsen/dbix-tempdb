@@ -83,9 +83,8 @@ sub dsn {
 
   if (!ref $self and $url) {
     $url = URI::db->new($url) unless ref $url and $url->isa('URI::_db');
-    unless ($url->has_recognized_engine) {
-      confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url";
-    }
+    confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url"
+      unless $url->has_recognized_engine;
     $self->can(sprintf '_dsn_for_%s', $url->canonical_engine)->($self, $url, $url->dbname);
   }
   else {
@@ -121,16 +120,16 @@ sub execute_file {
 
 sub new {
   my $class = shift;
-  my $url   = URI::db->new(shift || '');
-  unless ($url->has_recognized_engine) {
-    confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url";
-  }
+
+  my $url = URI::db->new(shift || '');
+  confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url"
+    unless $url->has_recognized_engine;
+
   my $self    = bless {@_, url => $url}, $class;
   my $dsn_for = sprintf '_dsn_for_%s', $url->canonical_engine || '';
 
-  unless ($self->can($dsn_for)) {
-    confess "Cannot generate temp database for '@{[$url->canonical_engine]}'. $class\::$dsn_for() is missing";
-  }
+  confess "Cannot generate temp database for '@{[$url->canonical_engine]}'. $class\::$dsn_for() is missing"
+    unless $self->can($dsn_for);
 
   $self->{create_database_command} ||= 'create database %d';
   $self->{drop_database_command}   ||= 'drop database %d';
@@ -491,7 +490,7 @@ L<DBIx::TempDB> will overwrite C<DBIX_TEMP_DB_URL>.
 
 =head2 create_database
 
-  $self = $self->create_database;
+  $tmpdb = $tmpdb->create_database;
 
 This method will create a temp database for the current process. Calling this
 method multiple times will simply do nothing. This method is normally
@@ -502,23 +501,23 @@ L</new>, but normalization will be done to make it work for the given database.
 
 =head2 dbh
 
-  $dbh = $self->dbh;
+  $dbh = $tmpdb->dbh;
 
 Will try to connect to the temp datbase and return a C<$dbh>.
 
 =head2 drop_databases
 
-  $self->drop_databases;
-  $self->drop_databases({self => "include"});
-  $self->drop_databases({self => "only"});
-  $self->drop_databases({name => "some_database_name"});
+  $tmpdb->drop_databases;
+  $tmpdb->drop_databases({tmpdb => "include"});
+  $tmpdb->drop_databases({tmpdb => "only"});
+  $tmpdb->drop_databases({name => "some_database_name"});
 
 Used to drop either sibling databases (default), sibling databases and the
 current database or a given database by name.
 
 =head2 dsn
 
-  ($dsn, $user, $pass, $attrs) = $self->dsn;
+  ($dsn, $user, $pass, $attrs) = $tmpdb->dsn;
   ($dsn, $user, $pass, $attrs) = DBIx::TempDB->dsn($url);
 
 Will parse L</url> or C<$url>, and return a list of arguments suitable for
@@ -530,15 +529,15 @@ method, with a L<URI::db> or URL string as input.
 
 =head2 execute
 
-  $self = $self->execute(@sql);
+  $tmpdb = $tmpdb->execute(@sql);
 
 This method will execute a list of C<@sql> statements in the temporary
 SQL server.
 
 =head2 execute_file
 
-  $self = $self->execute_file("relative/to/executable.sql");
-  $self = $self->execute_file("/absolute/path/stmt.sql");
+  $tmpdb = $tmpdb->execute_file("relative/to/executable.sql");
+  $tmpdb = $tmpdb->execute_file("/absolute/path/stmt.sql");
 
 This method will read the contents of a file and execute the SQL statements
 in the temporary server.
@@ -547,10 +546,10 @@ This method is a thin wrapper around L</execute>.
 
 =head2 new
 
-  $self = DBIx::TempDB->new($url, %args);
-  $self = DBIx::TempDB->new("mysql://127.0.0.1");
-  $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
-  $self = DBIx::TempDB->new("sqlite:");
+  $tmpdb = DBIx::TempDB->new($url, %args);
+  $tmpdb = DBIx::TempDB->new("mysql://127.0.0.1");
+  $tmpdb = DBIx::TempDB->new("postgresql://postgres@db.example.com");
+  $tmpdb = DBIx::TempDB->new("sqlite:");
 
 Creates a new object after checking the C<$url> is valid. C<%args> can be:
 
@@ -569,7 +568,7 @@ Can be set to a custom create database command in the database. The default is
 For even more control, you can set this to a code ref which will be called like
 this:
 
-  $self->$cb($database_name);
+  $tmpdb->$cb($database_name);
 
 The default is subject to change.
 
@@ -581,7 +580,7 @@ Can be set to a custom drop database command in the database. The default is
 For even more control, you can set this to a code ref which will be called like
 this:
 
-  $self->$cb($database_name);
+  $tmpdb->$cb($database_name);
 
 The default is subject to change.
 
@@ -619,7 +618,7 @@ The default is subject to change!
 
 =head2 url
 
-  $url = $self->url;
+  $url = $tmpdb->url;
 
 Returns the input URL as L<URI::db> compatible object. This URL will have
 the L<dbname|URI::db/dbname> part set to the database from L</create_database>,

@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Exporter 'import';
 
-use Carp 'confess';
+use Carp qw(confess croak);
 use Scalar::Util 'blessed';
 use URI::db;
 use URI::QueryParam;
@@ -12,17 +12,15 @@ our @EXPORT_OK = qw(dsn_for parse_sql);
 
 sub dsn_for {
   my ($url, $database_name) = @_;
-
   $url = URI::db->new($url) unless blessed $url;
-  confess "Scheme @{[$url->engine]} is not recognized as a database engine for connection url $url"
-    unless $url->has_recognized_engine;
+  croak "Unknown engine for $url." unless $url->has_recognized_engine;
 
   my $engine = $url->canonical_engine;
   $database_name //= $url->dbname;
   return _dsn_for_mysql($url, $database_name)  if $engine eq 'mysql';
   return _dsn_for_pg($url, $database_name)     if $engine eq 'pg';
   return _dsn_for_sqlite($url, $database_name) if $engine eq 'sqlite';
-  confess sprintf 'Cannot return DSN for engine "%s"', $engine;
+  croak "Can't create DSN for engine $engine.";
 }
 
 sub parse_sql {

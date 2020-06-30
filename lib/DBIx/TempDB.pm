@@ -2,7 +2,7 @@ package DBIx::TempDB;
 use strict;
 use warnings;
 
-use Carp 'confess';
+use Carp qw(confess croak);
 use Cwd ();
 use DBI;
 use DBIx::TempDB::Util qw(dsn_for parse_sql);
@@ -24,11 +24,11 @@ our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql', sqlite => '');
 my $N = 0;
 
 sub create_database {
-  return $_[0] if $_[0]->{created};
   my $self = shift;
-  my ($guard, $name);
+  return $self if $self->{created};
 
   local $@;
+  my ($guard, $name);
   while (++$guard < MAX_NUMBER_OF_TRIES) {
     $name = $self->_generate_database_name($N + $guard);
     eval { $self->_create_database($name) } or next;
@@ -45,13 +45,13 @@ sub create_database {
     return $self;
   }
 
-  confess "Could not create unique database: '$name'. $@";
+  croak qq(Couldn't create database "$name": $@);
 }
 
 sub dbh {
   my $self = shift;
   my @dsn  = $self->dsn;
-  die 'No such database' if $self->url->canonical_engine eq 'sqlite' and !-e $self->{database_name};
+  croak 'Datebase does not exist.' if $self->url->canonical_engine eq 'sqlite' and !-e $self->{database_name};
   return $self->{dbh} = DBI->connect(@dsn);
 }
 
@@ -73,10 +73,9 @@ sub drop_databases {
     my $name = $self->_generate_database_name($n);
     next unless $delete_self eq 'include' or ($self_db_name and $self_db_name ne $name);
     push @err, $@ unless eval { $self->_drop_database($name); 1 };
-    warn "[TempDB:$$] Dropped temp database $name: $@\n" if DEBUG and !$@;
   }
 
-  die $err[0] if @err == $max;
+  croak $err[0] if @err == $max;
   return $self;
 }
 
@@ -89,7 +88,7 @@ sub dsn {
     return dsn_for($url, $url->dbname);
   }
 
-  confess 'Cannot return DSN before create_database() is called.' unless $self->{database_name};
+  croak "Can't call dsn() before create_database()" unless $self->{database_name};
   return dsn_for($self->{url}, $self->{database_name});
 }
 
@@ -105,14 +104,14 @@ sub execute_file {
   my ($self, $path) = @_;
 
   unless (File::Spec->file_name_is_absolute($path)) {
-    confess "Cannot resolve absolute path to '$path'. Something went wrong with Cwd::abs_path($0)." unless CWD;
+    croak qq(Can't resolve path to "$path".) unless CWD;
     $path = File::Spec->catfile(CWD, split '/', $path);
   }
 
-  open my $SQL, '<', $path or die "DBIx::TempDB can't open $path: $!";
+  open my $SQL, '<', $path or croak "Can't open $path: $!";
   my $ret = my $sql = '';
   while ($ret = $SQL->sysread(my $buffer, 131072, 0)) { $sql .= $buffer }
-  die qq{DBIx::TempDB can't read from file "$path": $!} unless defined $ret;
+  croak qq{Can't read "$path": $!} unless defined $ret;
   warn "[TempDB:$$] Execute $path\n" if DEBUG;
   return $self->execute($sql);
 }
@@ -148,7 +147,7 @@ sub DESTROY {
 sub _cleanup {
   my $self = shift;
   return unless $self->{database_name};
-  die "[TempDB:$$] Unable to drop $self->{database_name}: $@"
+  confess "[TempDB:$$] Unable to drop $self->{database_name}: $@"
     unless eval { $self->_drop_database($self->{database_name}); 1 };
 }
 
@@ -161,7 +160,7 @@ sub _create_database {
   elsif ($self->url->canonical_engine eq 'sqlite') {
     require IO::File;
     use Fcntl qw(O_CREAT O_EXCL O_RDWR);
-    IO::File->new->open($name, O_CREAT | O_EXCL | O_RDWR) or die "open $name O_CREAT|O_EXCL|O_RDWR: $!\n";
+    IO::File->new->open($name, O_CREAT | O_EXCL | O_RDWR) or confess "Can't write $name: $!\n";
   }
   else {
     my $sql = $self->{create_database_command};
@@ -177,7 +176,7 @@ sub _drop_database {
     $self->{drop_database_command}->($self, $name);
   }
   elsif ($self->url->canonical_engine eq 'sqlite') {
-    unlink $name or die $!;
+    unlink $name or confess "unlink $name: $!" if -e $name;
   }
   else {
     my $sql = $self->{drop_database_command};
@@ -201,12 +200,10 @@ sub _generate_database_name {
   }/egx;
 
   if (63 < length $name and !$self->{keep_too_long_database_name}) {
-         $self->{template} =~ s!\%T!!g
-      or $self->{template} =~ s!\%H!!g
-      or $self->{template} =~ s!\%X!!g
-      or confess "Uable to create shorter database name.";
-    warn "!!! Database name '$name' is too long! Forcing a shorter template: $self->{template}"
-      if !$ENV{HARNESS_ACTIVE} or $ENV{HARNESS_VERBOSE};
+    confess qq(Can't create a shorter database name with "$self->{template}".)
+      unless $self->{template} =~ s!\%T!!g
+      or $self->{template}     =~ s!\%H!!g
+      or $self->{template}     =~ s!\%X!!g;
     return $self->_generate_database_name($n);
   }
 

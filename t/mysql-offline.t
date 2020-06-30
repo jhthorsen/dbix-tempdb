@@ -22,7 +22,7 @@ is_deeply(
     'dbi:mysql:host=127.0.0.1;port=1234;database=yikes',
     'u', 'p', {AutoCommit => 0, AutoInactiveDestroy => 1, PrintError => 0, RaiseError => 1, mysql_enable_utf8 => 1}
   ],
-  'dsn for tikes'
+  'dsn for yikes'
 );
 
 done_testing;

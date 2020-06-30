@@ -4,6 +4,7 @@ use warnings;
 use Exporter 'import';
 
 use Carp qw(confess croak);
+use IO::Select;
 use POSIX;
 use Scalar::Util 'blessed';
 use URI::db;
@@ -107,7 +108,7 @@ sub _on_process_end_double_fork {
 
   warn "[TempDB:$$] Watching process using double fork.\n" if DEBUG;
   local $SIG{CHLD} = 'DEFAULT';
-  pipe(my $READER, my $WRITER) or confess "Couldn't create pipe: $!";
+  pipe(my ($READER), my ($WRITER)) or confess "Couldn't create pipe: $!";
 
   # Parent
   if (my $pid_1 = fork // confess "Couldn't fork: $!") {
@@ -154,8 +155,8 @@ sub _on_process_end_fork {
 
   # Parent
   warn "[TempDB:$$] Watching process using single fork.\n" if DEBUG;
-  pipe(my $READER, my $WRITER) or confess "Couldn't create pipe: $!";
-  defined(my $pid = fork)      or confess "Couldn't fork: $!";
+  pipe(my ($READER), my ($WRITER)) or confess "Couldn't create pipe: $!";
+  defined(my $pid = fork)          or confess "Couldn't fork: $!";
   return DBIx::TempDB::Guard->new(sub { close $WRITER }, $pid) if $pid;
 
   # Child
@@ -164,7 +165,7 @@ sub _on_process_end_fork {
   close $WRITER;
   warn "[TempDB:$ppid/$$] Fork waiting on signals or pipe to go away.\n" if DEBUG;
   _on_process_signals($code);
-  1 while my $l = readline <$READER>;
+  IO::Select->new($READER)->can_read;
   local $ENV{DBIX_TEMP_DB_SIGNAL} = 'pipe';
   $code->();
   exit;

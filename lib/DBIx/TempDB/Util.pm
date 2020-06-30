@@ -164,7 +164,7 @@ sub _on_process_end_fork {
   close $WRITER;
   warn "[TempDB:$ppid/$$] Fork waiting on signals or pipe to go away.\n" if DEBUG;
   _on_process_signals($code);
-  1 while <$READER>;
+  1 while my $l = readline <$READER>;
   local $ENV{DBIX_TEMP_DB_SIGNAL} = 'pipe';
   $code->();
   exit;

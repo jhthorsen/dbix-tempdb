@@ -13,7 +13,7 @@ our @EXPORT_OK = qw(dsn_for parse_sql);
 sub dsn_for {
   my ($url, $database_name) = @_;
   $url = URI::db->new($url) unless blessed $url;
-  croak "Unknown engine for $url." unless $url->has_recognized_engine;
+  croak "Unknown engine for $url" unless $url->has_recognized_engine;
 
   my $engine = $url->canonical_engine;
   $database_name //= $url->dbname;

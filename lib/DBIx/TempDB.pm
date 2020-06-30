@@ -115,7 +115,7 @@ sub new {
   my $self  = bless {@_, url => $url}, $class;
 
   $self->{drop_from_child} //= 1;
-  $self->{schema_database} ||= $SCHEMA_DATABASE{$url->canonical_engine};
+  $self->{schema_database} ||= $SCHEMA_DATABASE{$url->canonical_engine} // croak qq(Unsupported engine for $url);
   $self->{template}        ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 

@@ -83,7 +83,7 @@ sub dsn {
   my ($self, $url) = @_;
 
   unless (blessed $self) {
-    Carp::carp("DBIx::TempDB->dsn(...) is deprecated. Use DBIx::TempDB::dsn_for() instead");
+    Carp::carp("DBIx::TempDB->dsn(...) is deprecated. Use DBIx::TempDB::Util::dsn_for() instead");
     $url = URI::db->new($url) unless blessed $url;
     return dsn_for($url, $url->dbname);
   }
@@ -397,6 +397,8 @@ Will parse L</url> and return a list of arguments suitable for L<DBI/connect>.
 
 Note that this method cannot be called as an object method before
 L</create_database> is called.
+
+See also L<DBIx::TempDB::Util/dsn_for>.
 
 =head2 execute
 

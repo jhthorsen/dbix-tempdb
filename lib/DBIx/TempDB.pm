@@ -5,7 +5,7 @@ use warnings;
 use Carp qw(confess croak);
 use Cwd ();
 use DBI;
-use DBIx::TempDB::Util qw(dsn_for parse_sql);
+use DBIx::TempDB::Util qw(dsn_for on_process_end parse_sql);
 use File::Basename ();
 use File::Spec;
 use IO::Handle ();
@@ -15,9 +15,7 @@ use URI::db;
 
 use constant CWD                 => eval { File::Basename::dirname(Cwd::abs_path($0)) };
 use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG} || 0;
-use constant KILL_SLEEP_INTERVAL => $ENV{DBIX_TEMP_DB_KILL_SLEEP_INTERVAL} || 2;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
-use constant MAX_OPEN_FDS        => eval { use POSIX qw(sysconf _SC_OPEN_MAX); sysconf(_SC_OPEN_MAX) } || 1024;
 
 our $VERSION         = '0.15';
 our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql', sqlite => '');
@@ -28,16 +26,15 @@ sub create_database {
   return $self if $self->{created};
 
   local $@;
-  my ($guard, $name);
+  my $mode = !$self->{drop_from_child} ? 'destroy' : $self->{drop_from_child} == 2 ? 'double_fork' : 'fork';
+  my ($guard, $name) = 0;
   while (++$guard < MAX_NUMBER_OF_TRIES) {
-    $name = $self->_generate_database_name($N + $guard);
+    $name = $self->_generate_database_name($N + $guard - 1);
     eval { $self->_create_database($name) } or next;
     $self->{database_name} = $name;
-    warn "[TempDB:$$] Created temp database $name\n" if DEBUG and !$ENV{DBIX_TEMP_DB_KEEP_DATABASE};
-    warn sprintf "[DBIx::TempDB] Created permanent database %s\n", +($self->dsn)[0]
-      if $ENV{DBIX_TEMP_DB_KEEP_DATABASE} and !$ENV{DBIX_TEMP_DB_SILENT};
-    $self->_drop_from_child               if $self->{drop_from_child} == 1;
-    $self->_drop_from_double_forked_child if $self->{drop_from_child} == 2;
+    warn "[TempDB:$$] Created @{[$ENV{DBIX_TEMP_DB_KEEP_DATABASE} ? 'permanent' : 'temp']} database $name\n" if DEBUG;
+    $self->{guard} = on_process_end $mode => $self->_drop_database_cb($self->{database_name})
+      unless $ENV{DBIX_TEMP_DB_KEEP_DATABASE};
     $self->{created}++;
     $self->{url}->dbname($name);
     $ENV{DBIX_TEMP_DB_URL} = $self->{url}->uri->as_string;
@@ -53,6 +50,7 @@ sub drop_databases {
 
   my $self_db_name = $self->{database_name} || '';
   my $delete_self  = $params->{self}        || '';
+  delete $self->{guard} if $delete_self;
 
   # Drop a single database by name
   return $self->_drop_database($params->{name}) if $params->{name};
@@ -61,7 +59,7 @@ sub drop_databases {
   # Drop sibling (and curren) databases
   my $max = $N > MAX_NUMBER_OF_TRIES ? $N : MAX_NUMBER_OF_TRIES;
   my @err;
-  for my $n (1 .. $max) {
+  for my $n (0 .. $max) {
     my $name = $self->_generate_database_name($n);
     next unless $delete_self eq 'include' or ($self_db_name and $self_db_name ne $name);
     push @err, $@ unless eval { $self->_drop_database($name); 1 };
@@ -119,28 +117,11 @@ sub new {
   $self->{template}        ||= 'tmp_%U_%X_%H%i';
   warn "[TempDB:$$] schema_database=$self->{schema_database}\n" if DEBUG;
 
-  $self->{drop_from_child} = 0 if $ENV{DBIX_TEMP_DB_KEEP_DATABASE};
-
   return $self->create_database if $self->{auto_create} // 1;
   return $self;
 }
 
 sub url { shift->{url}->uri }
-
-sub DESTROY {
-  my $self = shift;
-  return close $self->{DROP_PIPE} if $self->{DROP_PIPE};
-  return                          if $ENV{DBIX_TEMP_DB_KEEP_DATABASE};
-  return                          if $self->{double_forked};
-  return $self->_cleanup          if $self->{created};
-}
-
-sub _cleanup {
-  my $self = shift;
-  return unless $self->{database_name};
-  confess "[TempDB:$$] Unable to drop $self->{database_name}: $@"
-    unless eval { $self->_drop_database($self->{database_name}); 1 };
-}
 
 sub _create_database {
   my ($self, $name) = @_;
@@ -155,17 +136,28 @@ sub _create_database {
   }
 }
 
-sub _drop_database {
+sub _drop_database { shift->_drop_database_cb(shift)->() }
+
+sub _drop_database_cb {
   my ($self, $name) = @_;
 
   if ($self->url->canonical_engine eq 'sqlite') {
-    unlink $name or confess "unlink $name: $!" if -e $name;
+    return sub {
+      local $! = 0;
+      unlink $name                                     if -e $name;
+      confess "[TempDB:$$] Can't unlink $name: $!"     if $! and $! != 2;
+      warn "[TempDB:$$] Dropped temp database $name\n" if DEBUG;
+    };
   }
-  else {
+
+  my $sql = sprintf 'drop database if exists %s', $name;
+  $sql =~ s!\%d!$name!g;
+  return sub {
     my $dbh = DBI->connect($self->_schema_dsn);
-    eval { $dbh->do('set client_min_messages to warning') };    # avoid "NOTICE ..." for postgres
-    $dbh->do(sprintf 'drop database if exists %s', $name);
-  }
+    eval { $dbh->do('set client_min_messages to warning') };    # for postgres
+    $dbh->do($sql);
+    warn "[TempDB:$$] Dropped temp database $name\n" if DEBUG;
+  };
 }
 
 sub _generate_database_name {
@@ -196,65 +188,6 @@ sub _generate_database_name {
 
   return $name if $self->url->canonical_engine ne 'sqlite';
   return File::Spec->catfile($self->_tempdir, "$name.sqlite");
-}
-
-sub _drop_from_child {
-  my $self = shift;
-  my $ppid = $$;
-
-  pipe my $READ, $self->{DROP_PIPE} or confess "Could not create pipe: $!";
-  defined(my $pid = fork) or confess "Couldn't fork: $!";
-
-  # parent
-  return $self->{drop_pid} = $pid if $pid;
-
-  # child
-  $DB::CreateTTY = 0;                         # prevent debugger from creating terminals
-  $SIG{$_} = sub { $self->_cleanup; exit; }
-    for qw(INT QUIT TERM);
-
-  for (0 .. MAX_OPEN_FDS - 1) {
-    next if fileno($READ) == $_;
-    next if DEBUG and fileno(STDERR) == $_;
-    POSIX::close($_);
-  }
-
-  warn "[TempDB:$$] Waiting for $ppid to end\n" if DEBUG;
-  1 while <$READ>;
-  $self->_cleanup;
-  exit 0;
-}
-
-sub _drop_from_double_forked_child {
-  my $self = shift;
-  my $ppid = $$;
-
-  local $SIG{CHLD} = 'DEFAULT';
-
-  defined(my $pid = fork) or confess "Couldn't fork: $!";
-
-  if ($pid) {
-
-    # Wait around until the second fork is done so that when we return from
-    # here there are no new child processes that could mess things up if the
-    # calling process does any process handling.
-    waitpid $pid, 0;
-    return $self->{double_forked} = $pid;    # could just be a boolean
-  }
-
-  # Stop the debugger from creating new terminals
-  $DB::CreateTTY = 0;
-
-  $0 = "drop_$self->{database_name}";
-
-  # Detach completely from parent by creating our own session and process
-  # group, closing all filehandles and forking a second time.
-  POSIX::setsid() != -1 or confess "Couldn't become session leader: $!\n";
-  POSIX::close($_) for 0 .. MAX_OPEN_FDS - 1;
-  POSIX::_exit(0) if fork // confess "Couldn't fork: $!";
-  sleep KILL_SLEEP_INTERVAL while kill 0, $ppid;
-  $self->_cleanup;
-  exit 0;
 }
 
 sub _schema_dsn {
@@ -425,6 +358,8 @@ which monitor the parent with C<kill(0, $parent)>.
 
 The double fork code is based on a paste contributed by
 L<Easy Connect AS|http://easyconnect.no>, Knut Arne Bjørndal.
+
+See also L<DBIx::TempDB::Util/on_process_end>.
 
 =item * template
 

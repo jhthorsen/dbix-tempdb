@@ -173,7 +173,7 @@ sub _on_process_end_fork {
 sub _on_process_signals {
   my $code = shift;
   for my $name (qw(INT QUIT TERM)) {
-    $SIG{$name} = sub { $code->(); exit; };
+    $SIG{$name} = sub { local $ENV{DBIX_TEMP_DB_SIGNAL} = $name; $code->(); exit; };
   }
 }
 

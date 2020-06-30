@@ -17,7 +17,7 @@ use constant CWD                 => eval { File::Basename::dirname(Cwd::abs_path
 use constant DEBUG               => $ENV{DBIX_TEMP_DB_DEBUG} || 0;
 use constant MAX_NUMBER_OF_TRIES => $ENV{DBIX_TEMP_DB_MAX_NUMBER_OF_TRIES} || 20;
 
-our $VERSION         = '0.15';
+our $VERSION         = '0.16';
 our %SCHEMA_DATABASE = (pg => 'postgres', mysql => 'mysql', sqlite => '');
 my $N = 0;
 
@@ -210,7 +210,7 @@ DBIx::TempDB - Create a temporary database
 
 =head1 VERSION
 
-0.15
+0.16
 
 =head1 SYNOPSIS
 

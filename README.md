@@ -4,7 +4,7 @@ DBIx::TempDB - Create a temporary database
 
 # VERSION
 
-0.15
+0.16
 
 # SYNOPSIS
 
@@ -74,7 +74,7 @@ Note that calling ["create\_database"](#create_database) on different instances 
 
 ## create\_database
 
-    $self = $self->create_database;
+    $tmpdb = $tmpdb->create_database;
 
 This method will create a temp database for the current process. Calling this
 method multiple times will simply do nothing. This method is normally
@@ -83,29 +83,38 @@ automatically called by ["new"](#new).
 The database name generate is defined by the ["template"](#template) parameter passed to
 ["new"](#new), but normalization will be done to make it work for the given database.
 
+## drop\_databases
+
+    $tmpdb->drop_databases;
+    $tmpdb->drop_databases({tmpdb => "include"});
+    $tmpdb->drop_databases({tmpdb => "only"});
+    $tmpdb->drop_databases({name => "some_database_name"});
+
+Used to drop either sibling databases (default), sibling databases and the
+current database or a given database by name.
+
 ## dsn
 
-    ($dsn, $user, $pass, $attrs) = $self->dsn;
-    ($dsn, $user, $pass, $attrs) = DBIx::TempDB->dsn($url);
+    ($dsn, $user, $pass, $attrs) = $tmpdb->dsn;
 
-Will parse ["url"](#url) or `$url`, and return a list of arguments suitable for
-["connect" in DBI](https://metacpan.org/pod/DBI#connect).
+Will parse ["url"](#url) and return a list of arguments suitable for ["connect" in DBI](https://metacpan.org/pod/DBI#connect).
 
 Note that this method cannot be called as an object method before
-["create\_database"](#create_database) is called. You can on the other hand call it as a class
-method, with a [URI::db](https://metacpan.org/pod/URI%3A%3Adb) or URL string as input.
+["create\_database"](#create_database) is called.
+
+See also ["dsn\_for" in DBIx::TempDB::Util](https://metacpan.org/pod/DBIx%3A%3ATempDB%3A%3AUtil#dsn_for).
 
 ## execute
 
-    $self = $self->execute(@sql);
+    $tmpdb = $tmpdb->execute(@sql);
 
 This method will execute a list of `@sql` statements in the temporary
 SQL server.
 
 ## execute\_file
 
-    $self = $self->execute_file("relative/to/executable.sql");
-    $self = $self->execute_file("/absolute/path/stmt.sql");
+    $tmpdb = $tmpdb->execute_file("relative/to/executable.sql");
+    $tmpdb = $tmpdb->execute_file("/absolute/path/stmt.sql");
 
 This method will read the contents of a file and execute the SQL statements
 in the temporary server.
@@ -114,10 +123,10 @@ This method is a thin wrapper around ["execute"](#execute).
 
 ## new
 
-    $self = DBIx::TempDB->new($url, %args);
-    $self = DBIx::TempDB->new("mysql://127.0.0.1");
-    $self = DBIx::TempDB->new("postgresql://postgres@db.example.com");
-    $self = DBIx::TempDB->new("sqlite:");
+    $tmpdb = DBIx::TempDB->new($url, %args);
+    $tmpdb = DBIx::TempDB->new("mysql://127.0.0.1");
+    $tmpdb = DBIx::TempDB->new("postgresql://postgres@db.example.com");
+    $tmpdb = DBIx::TempDB->new("sqlite:");
 
 Creates a new object after checking the `$url` is valid. `%args` can be:
 
@@ -125,30 +134,6 @@ Creates a new object after checking the `$url` is valid. `%args` can be:
 
     ["create\_database"](#create_database) will be called automatically, unless `auto_create` is
     set to a false value.
-
-- create\_database\_command
-
-    Can be set to a custom create database command in the database. The default is
-    "create database %d", where %d will be replaced by the generated database name.
-
-    For even more control, you can set this to a code ref which will be called like
-    this:
-
-        $self->$cb($database_name);
-
-    The default is subject to change.
-
-- drop\_database\_command
-
-    Can be set to a custom drop database command in the database. The default is
-    "drop database %d", where %d will be replaced by the generated database name.
-
-    For even more control, you can set this to a code ref which will be called like
-    this:
-
-        $self->$cb($database_name);
-
-    The default is subject to change.
 
 - drop\_from\_child
 
@@ -166,6 +151,8 @@ Creates a new object after checking the `$url` is valid. `%args` can be:
     The double fork code is based on a paste contributed by
     [Easy Connect AS](http://easyconnect.no), Knut Arne Bjørndal.
 
+    See also ["on\_process\_end" in DBIx::TempDB::Util](https://metacpan.org/pod/DBIx%3A%3ATempDB%3A%3AUtil#on_process_end).
+
 - template
 
     Customize the generated database name. Default template is "tmp\_%U\_%X\_%H%i".
@@ -182,7 +169,7 @@ Creates a new object after checking the `$url` is valid. `%args` can be:
 
 ## url
 
-    $url = $self->url;
+    $url = $tmpdb->url;
 
 Returns the input URL as [URI::db](https://metacpan.org/pod/URI%3A%3Adb) compatible object. This URL will have
 the [dbname](https://metacpan.org/pod/URI%3A%3Adb#dbname) part set to the database from ["create\_database"](#create_database),

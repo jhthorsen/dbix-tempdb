@@ -48,19 +48,11 @@ sub create_database {
   croak qq(Couldn't create database "$name": $@);
 }
 
-sub dbh {
-  my $self = shift;
-  my @dsn  = $self->dsn;
-  croak 'Datebase does not exist.' if $self->url->canonical_engine eq 'sqlite' and !-e $self->{database_name};
-  return $self->{dbh} = DBI->connect(@dsn);
-}
-
 sub drop_databases {
   my ($self, $params) = @_;
 
   my $self_db_name = $self->{database_name} || '';
   my $delete_self  = $params->{self}        || '';
-  $self->dbh->disconnect if $delete_self and $self->{dbh} and $self->{dbh}->ping;
 
   # Drop a single database by name
   return $self->_drop_database($params->{name}) if $params->{name};
@@ -89,12 +81,13 @@ sub dsn {
   }
 
   croak "Can't call dsn() before create_database()" unless $self->{database_name};
+  croak 'Database does not exist.' if $self->url->canonical_engine eq 'sqlite' and !-e $self->{database_name};
   return dsn_for($self->{url}, $self->{database_name});
 }
 
 sub execute {
   my $self = shift;
-  my $dbh  = $self->dbh;
+  my $dbh  = DBI->connect($self->dsn);
   local $dbh->{sqlite_allow_multiple_statements} = 1 if $self->url->canonical_engine eq 'sqlite';
   $dbh->do($_) for map { parse_sql($self->url, $_) } @_;
   return $self;
@@ -169,7 +162,9 @@ sub _drop_database {
     unlink $name or confess "unlink $name: $!" if -e $name;
   }
   else {
-    DBI->connect($self->_schema_dsn)->do(sprintf 'drop database if exists %s', $name);
+    my $dbh = DBI->connect($self->_schema_dsn);
+    eval { $dbh->do('set client_min_messages to warning') };    # avoid "NOTICE ..." for postgres
+    $dbh->do(sprintf 'drop database if exists %s', $name);
   }
 }
 
@@ -360,12 +355,6 @@ automatically called by L</new>.
 
 The database name generate is defined by the L</template> parameter passed to
 L</new>, but normalization will be done to make it work for the given database.
-
-=head2 dbh
-
-  $dbh = $tmpdb->dbh;
-
-Will try to connect to the temp datbase and return a C<$dbh>.
 
 =head2 drop_databases
 

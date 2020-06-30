@@ -7,34 +7,37 @@ delete $test{$_} for grep { !$test{$_} } keys %test;
 
 plan skip_all => 'No live testing is set up' unless %test;
 
-my @tables;
 for my $test_case (sort keys %test) {
   subtest $test_case => sub {
     my $tmpdb1 = DBIx::TempDB->new($test{$test_case});
-    ok tables($tmpdb1), 'tempdb1' or diag "tables=@tables, err=$@";
+    create_table($tmpdb1);
+    ok has_table($tmpdb1), 'tmpdb1 has table';
 
     my $tmpdb2 = DBIx::TempDB->new($test{$test_case});
+    create_table($tmpdb2);
+    ok has_table($tmpdb2), 'tmpdb2 has table';
     $tmpdb2->drop_databases;
-    ok !tables($tmpdb1), 'tmpdb1 dropped' or diag "tables=@tables, err=$@";
-    ok tables($tmpdb2),  'tmpdb2'         or diag "tables=@tables, err=$@";
+    ok !can_connect($tmpdb1), 'tmpdb1 dropped';
+    ok has_table($tmpdb2),    'tmpdb2 still has table';
 
+    # drop_databases() will not fail if the database is already dropped
     $tmpdb2->drop_databases({self => 'include'});
-    $tmpdb2->drop_databases;    # should never fail
-    ok !tables($tmpdb2), 'drop self' or diag "tables=@tables, err=$@";
-
-    eval { $tmpdb2->drop_databases({self => 'only'}) };
-    ok $@, 'self is already dropped';
+    $tmpdb2->drop_databases({self => 'only'});
+    $tmpdb2->drop_databases;
+    ok !can_connect($tmpdb2), 'tmpdb2 dropped self';
   };
 }
 
 done_testing;
 
-sub create_table {
-  shift->dbh->do('create table users (name text)');
+sub can_connect {
+  return eval { DBI->connect(shift->dsn) };
 }
 
-sub tables {
-  my $tmpdb = shift;
-  @tables = ();
-  return eval { @tables = $tmpdb->dbh->tables(undef, undef, undef, undef); 1 } ? 1 : 0;
+sub create_table {
+  DBI->connect(shift->dsn)->do('create table dbix_tempdb_drop_t (name text)');
+}
+
+sub has_table {
+  !!grep {/dbix_tempdb_drop_t/} DBI->connect(shift->dsn)->tables(undef, undef, undef, undef);
 }

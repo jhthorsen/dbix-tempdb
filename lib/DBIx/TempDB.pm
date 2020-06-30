@@ -292,8 +292,8 @@ L</new>, but normalization will be done to make it work for the given database.
 =head2 drop_databases
 
   $tmpdb->drop_databases;
-  $tmpdb->drop_databases({tmpdb => "include"});
-  $tmpdb->drop_databases({tmpdb => "only"});
+  $tmpdb->drop_databases({self => "include"});
+  $tmpdb->drop_databases({self => "only"});
   $tmpdb->drop_databases({name => "some_database_name"});
 
 Used to drop either sibling databases (default), sibling databases and the
@@ -390,7 +390,7 @@ and L<Mojo::mysql>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2015, Jan Henning Thorsen
+Copyright (C) 2015-2020, Jan Henning Thorsen
 
 This program is free software, you can redistribute it and/or modify it under
 the terms of the Artistic License version 2.0.
